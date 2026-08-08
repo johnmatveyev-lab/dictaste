@@ -21,12 +21,16 @@ npm install
 npm start
 ```
 
-### Package an installer (on Windows)
+### Package an installer
+
+On a Windows machine (or via GitHub Actions on `dictaste-windows`):
 
 ```powershell
 npm run dist
 # → dist/Dictaste-Setup-0.1.0.exe
 ```
+
+CI builds unsigned NSIS installers on every push (`Build Windows installer` workflow). Download the artifact from Actions, or from [Releases](https://github.com/johnmatveyev-lab/dictaste-windows/releases) when a `v*` tag is pushed.
 
 ## Usage
 
