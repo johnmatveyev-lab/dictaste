@@ -39,13 +39,10 @@ Public DMG ships after Apple Developer ID notarization. Check:
 git clone https://github.com/johnmatveyev-lab/dictaste-mac.git
 cd dictaste-mac
 
-# 2. Generate Xcode project & build
+# 2. Generate Xcode project & install as Dictaste.app
 brew install xcodegen   # if needed
 xcodegen generate
-xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
-  -configuration Release -derivedDataPath build
-
-# 3. Install as Dictaste.app
+chmod +x scripts/install_local.sh
 ./scripts/install_local.sh
 # → /Applications/Dictaste.app
 ```

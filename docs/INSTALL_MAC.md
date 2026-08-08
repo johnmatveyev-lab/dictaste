@@ -26,22 +26,14 @@ cd dictaste-mac
 brew install xcodegen   # once
 xcodegen generate
 
-# Build + install
+# Build + install (recommended — installs as Dictaste.app)
 chmod +x scripts/install_local.sh
 ./scripts/install_local.sh
 ```
 
 Installs to `/Applications/Dictaste.app` and launches the app.
 
-### Manual xcodebuild
-
-```bash
-xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
-  -configuration Release -derivedDataPath build
-# App product may still be named FlowDictate.app internally:
-ditto build/Build/Products/Release/FlowDictate.app /Applications/Dictaste.app
-open /Applications/Dictaste.app
-```
+Prefer `./scripts/install_local.sh` over raw `xcodebuild` so the app always lands as **Dictaste.app** with the correct display name.
 
 ## First-run checklist
 
@@ -65,6 +57,6 @@ open /Applications/Dictaste.app
 ```bash
 pkill -x Dictaste 2>/dev/null || true
 rm -rf /Applications/Dictaste.app
-# Optional: launch agent
-rm -f ~/Library/LaunchAgents/com.johnmatveyev.flowdictate.plist
+# Optional: remove auto-start launch agent if present
+rm -f ~/Library/LaunchAgents/com.johnmatveyev.*.plist 2>/dev/null || true
 ```
