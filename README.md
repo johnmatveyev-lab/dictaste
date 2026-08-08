@@ -25,12 +25,15 @@ Full walkthrough: [docs/DEVELOPER_SETUP.md](./docs/DEVELOPER_SETUP.md)
 
 **Requirements:** macOS 14+ · Microphone + Accessibility permissions
 
-### Option A — Installer (when notarized)
+### Option A — Developer preview DMG (unsigned)
 
-Public DMG ships after Apple Developer ID notarization. Check:
+Download **Dictaste** for Mac now (Gatekeeper will warn until Apple notarization):
 
-- [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
-- [Releases](https://github.com/johnmatveyev-lab/dictaste/releases)
+- [Dictaste-0.1.0-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.0-unsigned.dmg)
+- Site: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
+- Release notes: [v0.1.0-preview](https://github.com/johnmatveyev-lab/dictaste-mac/releases/tag/v0.1.0-preview)
+
+First open: right-click **Dictaste** → **Open**. Notarized installer ships after Apple Developer ID.
 
 ### Option B — Build from source (developers)
 

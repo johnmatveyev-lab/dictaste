@@ -6,15 +6,18 @@
 - Xcode Command Line Tools (for source build)
 - Permissions: **Microphone**, **Accessibility**, **Speech Recognition**
 
-## Quick path (when DMG is available)
+## Quick path — developer preview DMG
 
-1. Download `Dictaste.dmg` from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) or https://dictaste.vercel.app/download  
+1. Download [`Dictaste-0.1.0-unsigned.dmg`](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.0-unsigned.dmg)  
+   (or use https://dictaste.vercel.app/download → **Preview DMG**)  
 2. Open DMG → drag **Dictaste** to Applications  
-3. Open **Dictaste** (menu bar app)  
+3. First launch: right-click **Dictaste** → **Open** (unsigned until notarized)  
 4. System Settings → Privacy & Security:
    - **Microphone** → enable Dictaste  
    - **Accessibility** → enable Dictaste  
 5. Menu bar → Account → paste license + API key  
+
+Notarized public DMG requires Apple Developer ID; preview is for developers/waitlist.  
 
 ## Build from source
 
