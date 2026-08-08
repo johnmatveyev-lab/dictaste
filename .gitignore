@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+node_modules/
+.env
+.env.*
+dist/
+build/
+*.dmg
+*.exe
+.idea/
+.vscode/

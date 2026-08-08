@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Developer setup
+    url: https://dictaste.vercel.app/developers/setup
+    about: Unlock free Developer plan after starring this repo
+  - name: Website / billing
+    url: https://dictaste.vercel.app
+    about: Pricing, waitlist, and account dashboard

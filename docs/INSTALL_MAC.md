@@ -1,0 +1,70 @@
+# Install Dictaste on macOS
+
+## Requirements
+
+- macOS 14 or later (best on latest)
+- Xcode Command Line Tools (for source build)
+- Permissions: **Microphone**, **Accessibility**, **Speech Recognition**
+
+## Quick path (when DMG is available)
+
+1. Download `Dictaste.dmg` from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) or https://dictaste.vercel.app/download  
+2. Open DMG → drag **Dictaste** to Applications  
+3. Open **Dictaste** (menu bar app)  
+4. System Settings → Privacy & Security:
+   - **Microphone** → enable Dictaste  
+   - **Accessibility** → enable Dictaste  
+5. Menu bar → Account → paste license + API key  
+
+## Build from source
+
+```bash
+git clone https://github.com/johnmatveyev-lab/dictaste-mac.git
+cd dictaste-mac
+
+# Generate Xcode project
+brew install xcodegen   # once
+xcodegen generate
+
+# Build + install
+chmod +x scripts/install_local.sh
+./scripts/install_local.sh
+```
+
+Installs to `/Applications/Dictaste.app` and launches the app.
+
+### Manual xcodebuild
+
+```bash
+xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
+  -configuration Release -derivedDataPath build
+# App product may still be named FlowDictate.app internally:
+ditto build/Build/Products/Release/FlowDictate.app /Applications/Dictaste.app
+open /Applications/Dictaste.app
+```
+
+## First-run checklist
+
+| Step | Action |
+|------|--------|
+| 1 | Menu bar icon visible |
+| 2 | Accessibility toggle ON for Dictaste |
+| 3 | License key pasted |
+| 4 | BYO LLM key (Developer plan) |
+| 5 | Hold **fn 🌐** → speak → release |
+| 6 | Highlight any text → auto-read (highlight-to-speak) |
+
+## Troubleshooting
+
+- **Hotkey doesn’t work:** re-enable Accessibility, quit & reopen Dictaste  
+- **No polish:** check license plan is **Developer** and API key is valid  
+- **API URL:** default `https://dictaste.vercel.app` (Account settings override)
+
+## Uninstall
+
+```bash
+pkill -x Dictaste 2>/dev/null || true
+rm -rf /Applications/Dictaste.app
+# Optional: launch agent
+rm -f ~/Library/LaunchAgents/com.johnmatveyev.flowdictate.plist
+```
