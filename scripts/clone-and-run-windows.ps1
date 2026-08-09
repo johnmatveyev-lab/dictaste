@@ -1,11 +1,7 @@
-# Clone Windows source and start Dictaste (developers)
-$ErrorActionPreference = "Stop"
-$Dir = if ($args[0]) { $args[0] } else { "$HOME\src\dictaste-windows" }
-Write-Host "→ Cloning into $Dir"
-if (-not (Test-Path "$Dir\.git")) {
-  git clone https://github.com/johnmatveyev-lab/dictaste-windows.git $Dir
-}
-Set-Location $Dir
+# Dictaste Windows — clone monorepo and run
+$repo = if ($env:DICTASTE_REPO) { $env:DICTASTE_REPO } else { "https://github.com/johnmatveyev-lab/dictaste.git" }
+$dir = if ($args[0]) { $args[0] } else { "dictaste" }
+git clone $repo $dir
+Set-Location "$dir/windows"
 npm install
-Write-Host "→ Starting Dictaste… Get license: https://dictaste.vercel.app/developers/setup"
 npm start

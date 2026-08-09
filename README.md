@@ -1,66 +1,79 @@
 # Dictaste
 
 **Speak it. Ship it.**  
-AI dictation + highlight-to-speak for **macOS** and **Windows**.
+Open-source **Mac & Windows** dictation + highlight-to-speak clients.
 
 [![Site](https://img.shields.io/badge/site-dictaste.vercel.app-C8F542?style=flat-square)](https://dictaste.vercel.app)
 [![Developer free](https://img.shields.io/badge/developers-free%20with%20★-C8F542?style=flat-square)](https://dictaste.vercel.app/developers)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](./LICENSE)
 
-> **★ Star this repo** to unlock the free **Developer** plan (unlimited polish with your own LLM API key).
+> **★ Star this repo** to unlock the free **Developer** plan — unlimited AI polish with **your own LLM API key** (costs us nothing; free for you for life).
 
 ---
 
-## Free for developers (3 minutes)
+## What is open vs hosted
 
-1. **Star this repository** (button at the top right → ★ Star)
-2. **Sign in** at [dictaste.vercel.app/developers/setup](https://dictaste.vercel.app/developers/setup)
-3. Enter your **GitHub username** → **Verify star & unlock** → copy your license key (`dt_live_…`)
-4. **Install** Dictaste (Mac or Windows below) → paste license + your OpenAI-compatible API key
+| Open in this repo (Apache-2.0) | Hosted product (private) |
+|--------------------------------|---------------------------|
+| **mac/** — native Swift menu-bar app | Website, Clerk auth, Stripe billing |
+| **windows/** — Electron tray MVP | Managed polish / TTS APIs |
+| Docs, install scripts, Releases | Entitlements & affiliate backend |
+
+You get **full client source**. The revenue SaaS stays private. That is intentional.
+
+---
+
+## Free for developers (lifetime)
+
+1. **★ Star this repository**
+2. Open [dictaste.vercel.app/developers/setup](https://dictaste.vercel.app/developers/setup) → sign in → verify your GitHub username  
+3. Copy your license key (`dt_live_…`)
+4. Install Dictaste → **Account** → paste license + **your** OpenAI-compatible API key  
 
 Full walkthrough: [docs/DEVELOPER_SETUP.md](./docs/DEVELOPER_SETUP.md)
+
+**Pro / Pro Plus** ($4 / $8): managed polish without bringing a key → [pricing](https://dictaste.vercel.app/#pricing)
+
+**Affiliates:** **30%** commission when you share Dictaste → [affiliate program](https://dictaste.vercel.app/affiliate)
+
+---
+
+## Repository layout
+
+```
+mac/          Native macOS app (Swift / XcodeGen)
+windows/      Windows tray app (Electron)
+docs/         Install + developer setup
+scripts/      Helper install scripts
+```
 
 ---
 
 ## Install on macOS
 
-**Requirements:** macOS 13 Ventura+ · Microphone + Accessibility permissions
+**Requirements:** macOS 13 Ventura+ · Microphone + Accessibility (+ Speech Recognition)
 
-### Option A — Developer preview DMG (unsigned)
+### Option A — Preview DMG (unsigned)
 
-Download **Dictaste** for your chip (Gatekeeper will warn until Apple notarization):
+Gatekeeper will warn until Apple notarization. Right-click → **Open**.
 
-- **Apple Silicon (M1/M2/M3/M4):** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-arm64-unsigned.dmg)
-- **Intel:** [Dictaste-0.1.1-intel-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-intel-unsigned.dmg)
-- Site: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
-- Release notes: [v0.1.0-preview](https://github.com/johnmatveyev-lab/dictaste-mac/releases/tag/v0.1.0-preview)
+- **Apple Silicon:** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases) *(see latest Releases)*  
+- **Intel:** same Releases page  
+- Also: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
-First open: right-click **Dictaste** → **Open**. Notarized installer ships after Apple Developer ID.  
-**Which Mac?** Apple menu → *About This Mac* → Chip.
-
-### Option B — Build from source (developers)
+### Option B — Build from source
 
 ```bash
-# 1. Clone the Mac app source
-git clone https://github.com/johnmatveyev-lab/dictaste-mac.git
-cd dictaste-mac
-
-# 2. Generate Xcode project & install as Dictaste.app
-brew install xcodegen   # if needed
+git clone https://github.com/johnmatveyev-lab/dictaste.git
+cd dictaste/mac
+brew install xcodegen   # once
 xcodegen generate
 chmod +x scripts/install_local.sh
 ./scripts/install_local.sh
 # → /Applications/Dictaste.app
 ```
 
-Then:
-
-1. Open **Dictaste** from Applications (menu bar icon)
-2. Grant **Microphone** + **Accessibility** when asked
-3. Menu bar → **Account & Settings…**
-4. Paste **license key** + **your LLM API key**
-5. Hold **fn 🌐** to dictate · highlight text to hear it read aloud
-
-More detail: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
+Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ---
 
@@ -68,67 +81,55 @@ More detail: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 **Requirements:** Windows 10/11 x64
 
-### Option A — Developer preview zip (unsigned)
+### Option A — Preview zip
 
-Download the portable **Dictaste** Windows build now (SmartScreen may warn — unsigned):
+- [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) or [download page](https://dictaste.vercel.app/download)  
+- Unzip → run **Dictaste.exe** → tray → Settings → paste license  
 
-- [Dictaste-Setup-0.1.0.zip](https://github.com/johnmatveyev-lab/dictaste-windows/releases/download/v0.1.0-preview/Dictaste-Setup-0.1.0.zip)
-- Site: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
-- Release notes: [v0.1.0-preview](https://github.com/johnmatveyev-lab/dictaste-windows/releases/tag/v0.1.0-preview)
+### Option B — Run / build from source
 
-Unzip → run **Dictaste.exe** → tray → **Settings** → paste license. NSIS Setup.exe ships when CI packaging is unblocked.
-
-### Option B — Run from source (developers)
-
-```powershell
-git clone https://github.com/johnmatveyev-lab/dictaste-windows.git
-cd dictaste-windows
+```bash
+git clone https://github.com/johnmatveyev-lab/dictaste.git
+cd dictaste/windows
 npm install
 npm start
+# pack portable zip:
+npm run pack:zip
 ```
 
-- Hotkey: **Ctrl+Shift+Space** (toggle listen)
-- Tray icon → **Settings** → paste license + optional API keys
-- Portable zip (macOS/Linux cross-build): `npm run pack:zip` → `dist/Dictaste-Setup-*.zip`
-- NSIS installer (on Windows): `npm run dist` → `dist/Dictaste-Setup-*.exe`
-
-More detail: [docs/INSTALL_WINDOWS.md](./docs/INSTALL_WINDOWS.md)
+Details: [docs/INSTALL_WINDOWS.md](./docs/INSTALL_WINDOWS.md)
 
 ---
 
-## What you get
+## After install
 
-| Plan | How | Polish |
-|------|-----|--------|
-| **Free** | Download + sign up | Managed polish (daily limit) |
-| **Developer** | ★ Star this repo + BYO key | Unlimited on *your* API key |
-| **Pro / Pro Plus** | Paid | Managed polish + premium TTS |
-
-- Site & billing: https://dictaste.vercel.app  
-- Support: support@dictaste.com  
+1. Menu bar / tray → **Account & Settings**  
+2. Paste **license** (`dt_live_…`)  
+3. Developer plan: paste **your LLM API key**  
+4. Hold **fn 🌐** (Mac) to dictate · highlight text to hear it  
 
 ---
 
-## Related repositories
+## Contributing
 
-| Repo | Purpose | Visibility |
-|------|---------|------------|
-| **This repo** (`dictaste`) | Star unlock + install docs | Public |
-| [`dictaste-mac`](https://github.com/johnmatveyev-lab/dictaste-mac) | Native macOS app source | Private (collaborators) / access via install path |
-| [`dictaste-windows`](https://github.com/johnmatveyev-lab/dictaste-windows) | Windows Electron MVP | Public |
+Issues and PRs on **client** code welcome. For product/billing bugs, use the site or Issues with the `hosted` label.
 
-Website/API source is **not** in this repo (kept private for security).
-
----
-
-## Brand
-
-**Dictaste** · Speak it. Ship it.  
-Lime `#C8F542` · Magenta `#FF2D95` · Dark `#0A0A0B`
+Please do not open PRs that re-implement or proxy the private managed API for free unlimited use.
 
 ---
 
 ## License
 
-App binaries and trademarks © Dictaste.  
-Star this repo to support development and unlock the free Developer plan.
+Client source: [Apache License 2.0](./LICENSE).  
+Trademark: **Dictaste** name/logo reserved.  
+Hosted service at dictaste.vercel.app is proprietary.
+
+---
+
+## Related
+
+| Repo | Role |
+|------|------|
+| **This repo** | Public clients + star unlock |
+| `dictaste-mac` / `dictaste-windows` | Historical mirrors (prefer this monorepo) |
+| `dictaste-web` | Private website + API (not public) |

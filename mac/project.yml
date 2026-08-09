@@ -1,0 +1,44 @@
+name: FlowDictate
+options:
+  bundleIdPrefix: com.johnmatveyev
+  createIntermediateGroups: true
+targets:
+  FlowDictate:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: FlowDictate
+        excludes:
+          - "Info.plist"
+      - path: Support/com.johnmatveyev.flowdictate.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.johnmatveyev.flowdictate
+        # User-facing product + executable name (bundle id kept for Accessibility TCC).
+        PRODUCT_NAME: Dictaste
+        INFOPLIST_FILE: FlowDictate/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        # Universal by default; CI/scripts can build ARCHS=arm64 or x86_64 alone.
+        ARCHS: "arm64 x86_64"
+        ONLY_ACTIVE_ARCH: NO
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: L85AF3V872
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_APP_SANDBOX: NO
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "1.0"
+schemes:
+  FlowDictate:
+    build:
+      targets:
+        FlowDictate: all
+    run:
+      config: Release

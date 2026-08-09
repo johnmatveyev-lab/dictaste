@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dictaste</title>
+  <style>
+    :root { --bg:#0A0A0B; --fg:#fff; --muted:#A1A1A6; --lime:#C8F542; --border:#2A2A2E; --surface:#141416; --magenta:#FF2D95; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, sans-serif; background:var(--bg); color:var(--fg); padding:20px; }
+    h1 { font-size:1.35rem; margin:0 0 4px; letter-spacing:-0.03em; }
+    .tag { color:var(--lime); font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.14em; }
+    label { display:block; font-size:0.75rem; color:var(--muted); margin:14px 0 6px; }
+    input, textarea { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:10px; color:var(--fg); padding:11px 12px; font:inherit; }
+    input:focus, textarea:focus { outline:none; border-color:rgba(200,245,66,0.45); }
+    textarea { min-height:110px; resize:vertical; }
+    .row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+    button { background:var(--lime); color:#0A0A0B; border:none; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer; font-size:0.875rem; }
+    button:hover { filter:brightness(1.05); }
+    button.ghost { background:transparent; color:var(--fg); border:1px solid rgba(200,245,66,0.55); }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .hint { font-size:0.8rem; color:var(--muted); margin-top:12px; line-height:1.5; }
+    #status { font-size:0.82rem; color:var(--lime); min-height:1.2em; margin-top:10px; font-weight:500; }
+    .checks { display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+    .checks label { display:flex; align-items:center; gap:8px; margin:0; color:var(--fg); font-size:0.85rem; cursor:pointer; }
+    .checks input { width:auto; }
+    .kbd { font-family: ui-monospace, monospace; font-size:0.75rem; background:#1c1c1f; border:1px solid var(--border); padding:2px 6px; border-radius:6px; color:var(--lime); }
+  </style>
+</head>
+<body>
+  <div class="tag">Dictaste · Windows MVP</div>
+  <h1>Speak it. Ship it.</h1>
+  <p class="hint">
+    Press <span class="kbd">Ctrl+Shift+Space</span> anywhere to start dictation.
+    Release path: stop with the same hotkey → AI polish (if licensed) → paste into the focused app.
+  </p>
+  <div id="status">Ready</div>
+
+  <label>License key (from dictaste.vercel.app/dashboard)</label>
+  <input id="license" placeholder="Paste your license key" autocomplete="off" spellcheck="false" />
+
+  <label>API base</label>
+  <input id="api" placeholder="https://dictaste.vercel.app" />
+
+  <div class="checks">
+    <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
+    <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
+  </div>
+
+  <label>Speech-to-text engine (W1)</label>
+  <select id="sttMode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="webspeech">Web Speech (default · free · online)</option>
+    <option value="openai">OpenAI Whisper API (BYO key · higher quality)</option>
+    <option value="whisper-cli">Offline whisper.cpp CLI (path below)</option>
+  </select>
+
+  <label>OpenAI API key (for Whisper STT mode)</label>
+  <input id="openai" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+
+  <label>whisper-cli binary path (offline)</label>
+  <input id="whisperBin" placeholder="C:\tools\whisper-cli.exe" />
+
+  <label>whisper model path (ggml)</label>
+  <input id="whisperModel" placeholder="C:\models\ggml-base.en.bin" />
+
+  <label>Manual transcript (optional)</label>
+  <textarea id="text" placeholder="Type or paste text to polish without mic…"></textarea>
+
+  <div class="row">
+    <button id="toggle">Start dictation</button>
+    <button id="save" class="ghost">Save</button>
+    <button id="run" class="ghost">Polish & paste</button>
+    <button id="dash" class="ghost">Dashboard</button>
+  </div>
+
+  <p class="hint">
+    Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
+    STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for W1 quality path.
+  </p>
+
+  <script>
+    let listening = false;
+
+    async function boot() {
+      const c = await window.dictaste.getConfig();
+      document.getElementById('license').value = c.licenseKey || '';
+      document.getElementById('api').value = c.apiBase || 'https://dictaste.vercel.app';
+      document.getElementById('polish').checked = c.polish !== false;
+      document.getElementById('autoPaste').checked = c.autoPaste !== false;
+      document.getElementById('sttMode').value = c.sttMode || 'webspeech';
+      document.getElementById('openai').value = c.openAIKey || '';
+      document.getElementById('whisperBin').value = c.whisperBin || '';
+      document.getElementById('whisperModel').value = c.whisperModel || '';
+      window.dictaste.onStatus((s) => {
+        listening = !!s.listening;
+        document.getElementById('toggle').textContent = listening ? 'Stop dictation' : 'Start dictation';
+        if (s.phase === 'transcribing') document.getElementById('status').textContent = 'Transcribing…';
+        else if (s.phase === 'polishing') document.getElementById('status').textContent = 'Polishing…';
+        else if (s.listening) document.getElementById('status').textContent = 'Listening…';
+        else if (s.error) document.getElementById('status').textContent = s.error;
+        else if (s.last) {
+          document.getElementById('status').textContent = 'Done';
+          document.getElementById('text').value = s.last;
+        } else document.getElementById('status').textContent = 'Ready';
+      });
+    }
+
+    async function save() {
+      await window.dictaste.saveConfig({
+        licenseKey: document.getElementById('license').value.trim(),
+        apiBase: document.getElementById('api').value.trim() || 'https://dictaste.vercel.app',
+        polish: document.getElementById('polish').checked,
+        autoPaste: document.getElementById('autoPaste').checked,
+        sttMode: document.getElementById('sttMode').value || 'webspeech',
+        openAIKey: document.getElementById('openai').value.trim(),
+        whisperBin: document.getElementById('whisperBin').value.trim(),
+        whisperModel: document.getElementById('whisperModel').value.trim(),
+      });
+      document.getElementById('status').textContent = 'Saved';
+    }
+
+    document.getElementById('save').onclick = save;
+    document.getElementById('toggle').onclick = async () => {
+      await save();
+      await window.dictaste.setListening(!listening);
+    };
+    document.getElementById('run').onclick = async () => {
+      await save();
+      const t = document.getElementById('text').value;
+      const out = await window.dictaste.polishAndPaste(t);
+      document.getElementById('text').value = out;
+      document.getElementById('status').textContent = 'Polished & paste sent';
+    };
+    document.getElementById('dash').onclick = () => {
+      const api = document.getElementById('api').value.trim() || 'https://dictaste.vercel.app';
+      window.dictaste.openExternal(api.replace(/\/$/, '') + '/dashboard');
+    };
+    boot();
+  </script>
+</body>
+</html>

@@ -1,21 +1,23 @@
 # Repository layout
 
-This public repo is **install + star unlock only**.
+**Option B:** open desktop clients + private SaaS.
 
 | Path | Purpose |
 |------|---------|
-| `README.md` | Star CTA + install overview |
-| `docs/` | Developer setup + OS install guides |
-| `scripts/` | Helper clone/install scripts |
-| `.github/` | Issue contact links |
+| `mac/` | Native macOS Swift app (XcodeGen → `xcodegen generate`) |
+| `windows/` | Electron Windows tray MVP |
+| `docs/` | Install + developer setup |
+| `scripts/` | Clone/install helpers |
+| `.github/` | Issue templates |
+| `LICENSE` / `NOTICE` | Apache-2.0 + trademark note |
 
-## Moved (not in this repo)
+## Not in this repository
 
 | Content | Where |
 |---------|--------|
-| Next.js website + API | Private: `johnmatveyev-lab/dictaste-web` |
-| Ship checklists, rebrand notes, smoke tests | Private web repo |
-| Full macOS Swift project | Public: `johnmatveyev-lab/dictaste-mac` |
-| Windows Electron project | Public: `johnmatveyev-lab/dictaste-windows` |
+| Next.js website + Stripe/Clerk APIs | **Private** `johnmatveyev-lab/dictaste-web` |
+| Production secrets | Vercel / never git |
 
-Do not commit secrets or production keys here.
+## Free Developer unlock
+
+Stars on **this** repo (`johnmatveyev-lab/dictaste`) are checked by the hosted site.
