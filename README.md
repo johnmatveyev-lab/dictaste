@@ -23,17 +23,19 @@ Full walkthrough: [docs/DEVELOPER_SETUP.md](./docs/DEVELOPER_SETUP.md)
 
 ## Install on macOS
 
-**Requirements:** macOS 14+ · Microphone + Accessibility permissions
+**Requirements:** macOS 13 Ventura+ · Microphone + Accessibility permissions
 
 ### Option A — Developer preview DMG (unsigned)
 
-Download **Dictaste** for Mac now (Gatekeeper will warn until Apple notarization):
+Download **Dictaste** for your chip (Gatekeeper will warn until Apple notarization):
 
-- [Dictaste-0.1.0-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.0-unsigned.dmg)
+- **Apple Silicon (M1/M2/M3/M4):** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-arm64-unsigned.dmg)
+- **Intel:** [Dictaste-0.1.1-intel-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-intel-unsigned.dmg)
 - Site: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 - Release notes: [v0.1.0-preview](https://github.com/johnmatveyev-lab/dictaste-mac/releases/tag/v0.1.0-preview)
 
-First open: right-click **Dictaste** → **Open**. Notarized installer ships after Apple Developer ID.
+First open: right-click **Dictaste** → **Open**. Notarized installer ships after Apple Developer ID.  
+**Which Mac?** Apple menu → *About This Mac* → Chip.
 
 ### Option B — Build from source (developers)
 

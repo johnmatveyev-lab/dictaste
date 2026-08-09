@@ -2,14 +2,17 @@
 
 ## Requirements
 
-- macOS 14 or later (best on latest)
+- macOS 13 Ventura or later (best on latest)
 - Xcode Command Line Tools (for source build)
 - Permissions: **Microphone**, **Accessibility**, **Speech Recognition**
 
 ## Quick path — developer preview DMG
 
-1. Download [`Dictaste-0.1.0-unsigned.dmg`](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.0-unsigned.dmg)  
-   (or use https://dictaste.vercel.app/download → **Preview DMG**)  
+Pick the build that matches your chip (**About This Mac**):
+
+1. **Apple Silicon (M1–M4):** [`Dictaste-0.1.1-arm64-unsigned.dmg`](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-arm64-unsigned.dmg)  
+   **Intel:** [`Dictaste-0.1.1-intel-unsigned.dmg`](https://github.com/johnmatveyev-lab/dictaste-mac/releases/download/v0.1.0-preview/Dictaste-0.1.1-intel-unsigned.dmg)  
+   (or https://dictaste.vercel.app/download)  
 2. Open DMG → drag **Dictaste** to Applications  
 3. First launch: right-click **Dictaste** → **Open** (unsigned until notarized)  
 4. System Settings → Privacy & Security:
