@@ -57,8 +57,8 @@ scripts/      Helper install scripts
 
 Gatekeeper will warn until Apple notarization. Right-click → **Open**.
 
-- **Apple Silicon:** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases) *(see latest Releases)*  
-- **Intel:** same Releases page  
+- **Apple Silicon:** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-0.1.1-arm64-unsigned.dmg)  
+- **Intel:** [Dictaste-0.1.1-intel-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-0.1.1-intel-unsigned.dmg)  
 - Also: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
 ### Option B — Build from source
@@ -83,7 +83,8 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) or [download page](https://dictaste.vercel.app/download)  
+- [Dictaste-Setup-0.1.0.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-Setup-0.1.0.zip)  
+- Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** → tray → Settings → paste license  
 
 ### Option B — Run / build from source
