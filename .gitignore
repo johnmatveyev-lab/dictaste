@@ -3,7 +3,8 @@
 **/node_modules/
 **/dist/
 **/build/
-!windows/build/icon.ico
+# Keep Windows electron-builder icons tracked (parent **/build/ would exclude them)
+!windows/build/
 !windows/build/**
 **/DerivedData/
 **/xcuserdata/
