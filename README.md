@@ -66,9 +66,15 @@ More detail: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 **Requirements:** Windows 10/11 x64
 
-### Option A — Setup.exe (when published)
+### Option A — Developer preview zip (unsigned)
 
-See [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) and the download page.
+Download the portable **Dictaste** Windows build now (SmartScreen may warn — unsigned):
+
+- [Dictaste-Setup-0.1.0.zip](https://github.com/johnmatveyev-lab/dictaste-windows/releases/download/v0.1.0-preview/Dictaste-Setup-0.1.0.zip)
+- Site: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
+- Release notes: [v0.1.0-preview](https://github.com/johnmatveyev-lab/dictaste-windows/releases/tag/v0.1.0-preview)
+
+Unzip → run **Dictaste.exe** → tray → **Settings** → paste license. NSIS Setup.exe ships when CI packaging is unblocked.
 
 ### Option B — Run from source (developers)
 
@@ -81,7 +87,8 @@ npm start
 
 - Hotkey: **Ctrl+Shift+Space** (toggle listen)
 - Tray icon → **Settings** → paste license + optional API keys
-- Package installer: `npm run dist` → `dist/Dictaste-Setup-*.exe`
+- Portable zip (macOS/Linux cross-build): `npm run pack:zip` → `dist/Dictaste-Setup-*.zip`
+- NSIS installer (on Windows): `npm run dist` → `dist/Dictaste-Setup-*.exe`
 
 More detail: [docs/INSTALL_WINDOWS.md](./docs/INSTALL_WINDOWS.md)
 

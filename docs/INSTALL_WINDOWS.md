@@ -6,11 +6,13 @@
 - Node.js 20+ (for source install)
 - Microphone permission
 
-## Quick path (when Setup.exe is available)
+## Quick path — developer preview zip (unsigned)
 
-1. Download `Dictaste-Setup-*.exe` from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases)  
-2. Run installer  
+1. Download [Dictaste-Setup-0.1.0.zip](https://github.com/johnmatveyev-lab/dictaste-windows/releases/download/v0.1.0-preview/Dictaste-Setup-0.1.0.zip)  
+2. Unzip and run **Dictaste.exe** (SmartScreen may warn — unsigned)  
 3. Tray icon → Settings → paste license + keys  
+
+Site mirror: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
 ## Run from source (developers)
 
@@ -21,16 +23,21 @@ npm install
 npm start
 ```
 
-### Package an installer
+### Package a portable zip (any OS)
 
-On a Windows machine (or via GitHub Actions on `dictaste-windows`):
+```bash
+npm run pack:zip
+# → dist/Dictaste-Setup-0.1.0.zip
+```
+
+### Package an NSIS installer (Windows host or CI)
 
 ```powershell
 npm run dist
 # → dist/Dictaste-Setup-0.1.0.exe
 ```
 
-CI builds unsigned NSIS installers on every push (`Build Windows installer` workflow). Download the artifact from Actions, or from [Releases](https://github.com/johnmatveyev-lab/dictaste-windows/releases) when a `v*` tag is pushed.
+CI builds unsigned NSIS installers when GitHub Actions is available. Until then, use the published preview zip on [dictaste-windows releases](https://github.com/johnmatveyev-lab/dictaste-windows/releases).
 
 ## Usage
 
