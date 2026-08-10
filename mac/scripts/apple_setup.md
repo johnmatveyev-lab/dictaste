@@ -86,39 +86,26 @@ https://appleid.apple.com → Sign-In and Security → App-Specific Passwords �
 
 ## Phase C — Build, sign, notarize DMG
 
-**Preferred (arm64 + Intel, sign + notarize + staple):**
-
 ```bash
-# Local private clone or monorepo mac/
-cd /Users/john/Projects/FlowDictate   # product name is Dictaste
-# or: cd /Users/john/Projects/dictaste-public/mac
+cd /Users/john/Projects/FlowDictate   # local folder; product is Dictaste
 
-# Requires: Developer ID Application in Keychain + notarytool profile DictasteNotary
-# Human click path: docs/YOU_CLICK_APPLE_NOW.md (or repo-root YOU_CLICK_APPLE_NOW.md)
-./scripts/notarize_dual_dmgs.sh
-
-# Output:
-#   dist/Dictaste-0.1.2-arm64.dmg
-#   dist/Dictaste-0.1.2-intel.dmg
-#   dist/Dictaste.dmg  (arm64 copy)
-```
-
-**Manual path (single arch):**
-
-```bash
-cd /Users/john/Projects/FlowDictate
-
+# 1. Release build (Developer ID used by package script)
 xcodebuild -project FlowDictate.xcodeproj -scheme FlowDictate \
   -configuration Release -derivedDataPath build \
   CODE_SIGN_IDENTITY="Developer ID Application" \
   DEVELOPMENT_TEAM=YOUR_TEAM_ID \
   CODE_SIGN_STYLE=Manual
 
+# 2. Package + notarize
 export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export NOTARY_PROFILE=DictasteNotary
 ./scripts/package_dmg.sh
-# or: ./scripts/release_ready.sh --notarize
+
+# Output: dist/Dictaste.dmg
+# Or one-shot:
+# ./scripts/release_ready.sh --notarize
 ```
+
 ---
 
 ## Phase D — Host DMG + wire website

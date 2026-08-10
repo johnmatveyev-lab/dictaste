@@ -76,7 +76,8 @@ final class AppState: ObservableObject {
         loadHistory()
         permissions.refresh()
         // Only block on mic + accessibility. fn key is optional.
-        if !permissions.requiredGranted {
+        // Also force setup if not in /Applications (TCC Accessibility won't stick).
+        if !permissions.requiredGranted || !permissions.locationOK {
             showOnboarding()
         }
 
@@ -132,6 +133,10 @@ final class AppState: ObservableObject {
                 let axBefore = self.permissions.axGranted
                 self.permissions.refresh()
                 if self.permissions.axGranted {
+                    // Newly granted after relaunch — start listeners immediately.
+                    if !axBefore {
+                        self.hotkey.startIfPossible()
+                    }
                     self.hotkey.ensureHealthy()
                     if !self.selectionMonitor.isRunning {
                         self.selectionMonitor.start()
@@ -540,7 +545,7 @@ final class AppState: ObservableObject {
     func showOnboarding() {
         if onboardingWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
+                contentRect: NSRect(x: 0, y: 0, width: 600, height: 600),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -551,6 +556,8 @@ final class AppState: ObservableObject {
             window.center()
             onboardingWindow = window
         }
+        // Refresh content if window already existed (permission state may have changed).
+        onboardingWindow?.contentView = NSHostingView(rootView: OnboardingView(appState: self))
         onboardingWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

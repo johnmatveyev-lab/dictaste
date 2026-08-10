@@ -2,19 +2,19 @@
 
 Native menu bar app — system-wide dictation + highlight-to-speak.
 
-**Canonical repo (star here):** https://github.com/johnmatveyev-lab/dictaste  
-**Product site:** https://dictaste.vercel.app  
+**Canonical repo (star for free Developer plan):** https://github.com/johnmatveyev-lab/dictaste  
+**Product:** https://dictaste.vercel.app  
 
 ## Build
 
 ```bash
-# from monorepo root: cd mac
+cd mac
 brew install xcodegen
 xcodegen generate
 ./scripts/install_local.sh
 ```
 
-See [../docs/INSTALL_MAC.md](../docs/INSTALL_MAC.md).
+**Important:** Always open Dictaste from **/Applications** after install. Running from a DMG uses App Translocation and Accessibility permissions will not stick.
 
 ## License
 
