@@ -71,11 +71,14 @@
     <button id="save" class="ghost">Save</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
+    <button id="help" class="ghost">Help / Issues</button>
   </div>
 
   <p class="hint">
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for W1 quality path.
+    Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+    · docs in the monorepo <code>docs/INSTALL_WINDOWS.md</code>.
   </p>
 
   <script>
@@ -134,6 +137,9 @@
     document.getElementById('dash').onclick = () => {
       const api = document.getElementById('api').value.trim() || 'https://dictaste.vercel.app';
       window.dictaste.openExternal(api.replace(/\/$/, '') + '/dashboard');
+    };
+    document.getElementById('help').onclick = () => {
+      window.dictaste.openExternal('https://github.com/johnmatveyev-lab/dictaste/issues');
     };
     boot();
   </script>
