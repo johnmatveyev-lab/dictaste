@@ -83,7 +83,7 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Dictaste-Setup-0.1.0.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-Setup-0.1.0.zip)  
+- [Dictaste-Setup-0.1.1.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-Setup-0.1.1.zip)  
 - Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** → tray → Settings → paste license  
 

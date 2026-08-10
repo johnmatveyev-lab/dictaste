@@ -1,8 +1,8 @@
 {
   "name": "dictaste-windows",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
-  "description": "Dictaste for Windows — hold-to-talk MVP",
+  "description": "Dictaste for Windows \u2014 hold-to-talk MVP",
   "author": "Dictaste <support@dictaste.com>",
   "main": "src/main.js",
   "scripts": {
@@ -15,11 +15,20 @@
   "build": {
     "appId": "com.dictaste.windows",
     "productName": "Dictaste",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["src/**/*", "package.json"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
     "icon": "build/icon.ico",
     "win": {
-      "target": ["nsis", "zip"],
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "build/icon.ico",
       "artifactName": "Dictaste-Setup-${version}.${ext}"
     },
