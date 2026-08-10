@@ -1,10 +1,10 @@
 # Install Dictaste on macOS
 
-## Preview DMG
+## Notarized DMG (recommended)
 
-1. Download arm64 or Intel DMG from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download arm64 or Intel DMG from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.2) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Open the DMG → drag **Dictaste** to Applications.
-3. First launch: right-click → **Open** (unsigned preview until notarized).
+3. Launch Dictaste (Gatekeeper accepts notarized Developer ID builds).
 4. Grant **Microphone**, **Accessibility**, and **Speech Recognition**.
 
 ## Build from source

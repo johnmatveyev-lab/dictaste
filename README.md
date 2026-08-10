@@ -53,12 +53,12 @@ scripts/      Helper install scripts
 
 **Requirements:** macOS 13 Ventura+ · Microphone + Accessibility (+ Speech Recognition)
 
-### Option A — Preview DMG (unsigned)
+### Option A — Notarized DMG (recommended)
 
-Gatekeeper will warn until Apple notarization. Right-click → **Open**.
+Developer ID signed + Apple notarized. Open the DMG → drag **Dictaste** to Applications.
 
-- **Apple Silicon:** [Dictaste-0.1.1-arm64-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-0.1.1-arm64-unsigned.dmg)  
-- **Intel:** [Dictaste-0.1.1-intel-unsigned.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.1-preview/Dictaste-0.1.1-intel-unsigned.dmg)  
+- **Apple Silicon:** [Dictaste-0.1.2-arm64.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.2/Dictaste-0.1.2-arm64.dmg)  
+- **Intel:** [Dictaste-0.1.2-intel.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.2/Dictaste-0.1.2-intel.dmg)  
 - Also: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
 ### Option B — Build from source
