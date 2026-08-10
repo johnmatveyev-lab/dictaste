@@ -33,8 +33,8 @@ targets:
         DEVELOPMENT_TEAM: L85AF3V872
         ENABLE_HARDENED_RUNTIME: NO
         ENABLE_APP_SANDBOX: NO
-        CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: "0.1.4"
 schemes:
   FlowDictate:
     build:
