@@ -10,6 +10,37 @@ cd "$ROOT"
 OUT="$ROOT/dist"
 VERSION="${MARKETING_VERSION:-0.1.4}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-DictasteNotary}"
+# ASC API key fallback (works when keychain profile can't be written in headless agents)
+ASC_KEY_ID="${ASC_KEY_ID:-${APP_STORE_CONNECT_KEY_ID:-}}"
+ASC_ISSUER="${ASC_ISSUER:-${APP_STORE_CONNECT_ISSUER_ID:-}}"
+ASC_KEY_PATH="${ASC_KEY_PATH:-}"
+if [[ -z "$ASC_KEY_PATH" ]]; then
+  if [[ -n "$ASC_KEY_ID" && -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" ]]; then
+    ASC_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+  elif [[ -f "$HOME/.dictaste-apple/issuer_id.txt" ]]; then
+    # Discover first AuthKey_*.p8
+    ASC_KEY_PATH=$(ls "$HOME/.appstoreconnect/private_keys"/AuthKey_*.p8 2>/dev/null | head -1 || true)
+    if [[ -n "$ASC_KEY_PATH" ]]; then
+      ASC_KEY_ID=$(basename "$ASC_KEY_PATH" | sed -n 's/AuthKey_\(.*\)\.p8/\1/p')
+    fi
+  fi
+fi
+if [[ -z "$ASC_ISSUER" && -f "$HOME/.dictaste-apple/issuer_id.txt" ]]; then
+  ASC_ISSUER=$(tr -d '[:space:]' <"$HOME/.dictaste-apple/issuer_id.txt")
+fi
+
+notary_submit() {
+  local dmg="$1"
+  if [[ -n "$ASC_KEY_PATH" && -n "$ASC_KEY_ID" && -n "$ASC_ISSUER" && -f "$ASC_KEY_PATH" ]]; then
+    xcrun notarytool submit "$dmg" \
+      --key "$ASC_KEY_PATH" \
+      --key-id "$ASC_KEY_ID" \
+      --issuer "$ASC_ISSUER" \
+      --wait
+  else
+    xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+  fi
+}
 
 # Resolve identity
 if [[ -z "${CODESIGN_IDENTITY:-}" ]]; then
@@ -29,21 +60,32 @@ if [[ -z "${DEVELOPMENT_TEAM:-}" ]]; then
   DEVELOPMENT_TEAM=$(echo "$CODESIGN_IDENTITY" | sed -n 's/.*(\([^)]*\)).*/\1/p')
 fi
 
-if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
-  echo "ERROR: notarytool profile '$NOTARY_PROFILE' missing."
-  echo "Create app-specific password at https://appleid.apple.com → App-Specific Passwords"
-  echo "Then:"
-  echo "  xcrun notarytool store-credentials $NOTARY_PROFILE \\"
-  echo "    --apple-id \"jmat2019@icloud.com\" \\"
-  echo "    --team-id \"$DEVELOPMENT_TEAM\" \\"
-  echo "    --password \"xxxx-xxxx-xxxx-xxxx\""
+HAS_PROFILE=0
+if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+  HAS_PROFILE=1
+fi
+HAS_API=0
+if [[ -n "$ASC_KEY_PATH" && -n "$ASC_KEY_ID" && -n "$ASC_ISSUER" && -f "$ASC_KEY_PATH" ]]; then
+  HAS_API=1
+fi
+if [[ "$HAS_PROFILE" -eq 0 && "$HAS_API" -eq 0 ]]; then
+  echo "ERROR: No notary credentials."
+  echo "Either store keychain profile:"
+  echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id … --team-id $DEVELOPMENT_TEAM --password …"
+  echo "Or place ASC API key + issuer:"
+  echo "  ~/.appstoreconnect/private_keys/AuthKey_XXX.p8"
+  echo "  ~/.dictaste-apple/issuer_id.txt"
   exit 1
 fi
 
 echo "→ Identity: $CODESIGN_IDENTITY"
 echo "→ Team:     $DEVELOPMENT_TEAM"
 echo "→ Version:  $VERSION"
-echo "→ Profile:  $NOTARY_PROFILE"
+if [[ "$HAS_API" -eq 1 ]]; then
+  echo "→ Notary:   ASC API key $ASC_KEY_ID"
+else
+  echo "→ Profile:  $NOTARY_PROFILE"
+fi
 
 command -v xcodegen >/dev/null && xcodegen generate
 
@@ -118,7 +160,7 @@ build_and_package() {
   hdiutil create -volname "Dictaste" -srcfolder "$stage" -ov -format UDZO "$dmg"
 
   echo "→ Notarize $dmg"
-  xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+  notary_submit "$dmg"
   xcrun stapler staple "$dmg"
   xcrun stapler validate "$dmg"
   # Also staple app inside a copy for local install testing

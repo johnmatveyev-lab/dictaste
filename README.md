@@ -57,8 +57,8 @@ scripts/      Helper install scripts
 
 Developer ID signed + Apple notarized. Open the DMG → drag **Dictaste** to Applications.
 
-- **Apple Silicon:** [Dictaste-0.1.3-arm64.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-0.1.3-arm64.dmg)  
-- **Intel:** [Dictaste-0.1.3-intel.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-0.1.3-intel.dmg)  
+- **Apple Silicon:** [Dictaste-0.1.4-arm64.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-0.1.4-arm64.dmg)  
+- **Intel:** [Dictaste-0.1.4-intel.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-0.1.4-intel.dmg)  
 - Also: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
 ### Option B — Build from source
@@ -83,8 +83,8 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Dictaste-Setup-0.1.1.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-Setup-0.1.1.zip)  
-- Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.3) / [download page](https://dictaste.vercel.app/download)  
+- [Dictaste-Setup-0.1.1.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.1.zip)  
+- Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.4) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** → tray → Settings → paste license  
 
 ### Option B — Run / build from source

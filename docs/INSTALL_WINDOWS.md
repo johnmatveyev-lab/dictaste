@@ -2,7 +2,7 @@
 
 ## Preview zip (0.1.1)
 
-1. Download [Dictaste-Setup-0.1.1.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-Setup-0.1.1.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.1.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.1.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — not code-signed yet).
 3. Tray icon → **Settings…** → paste license from the dashboard.
 4. Hotkey: **Ctrl+Shift+Space** to start/stop dictation.
