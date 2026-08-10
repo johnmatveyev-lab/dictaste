@@ -2,10 +2,11 @@
 
 ## Notarized DMG (recommended)
 
-1. Download arm64 or Intel DMG from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.2) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
-2. Open the DMG → drag **Dictaste** to Applications.
-3. Launch Dictaste (Gatekeeper accepts notarized Developer ID builds).
-4. Grant **Microphone**, **Accessibility**, and **Speech Recognition**.
+1. Download arm64 or Intel DMG from [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.3) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+2. Open the DMG → drag **Dictaste** to **Applications** (required — Accessibility does not stick if you run from the DMG).
+3. Launch **Dictaste** from Applications (Gatekeeper accepts notarized Developer ID builds).
+4. Complete onboarding: **Microphone** + **Accessibility**. If Accessibility looks stuck, use **Relaunch** in the setup window.
+5. Optional: free the **fn 🌐** key, or skip and use left ⌥.
 
 ## Build from source
 

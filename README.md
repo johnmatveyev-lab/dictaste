@@ -57,8 +57,8 @@ scripts/      Helper install scripts
 
 Developer ID signed + Apple notarized. Open the DMG → drag **Dictaste** to Applications.
 
-- **Apple Silicon:** [Dictaste-0.1.2-arm64.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.2/Dictaste-0.1.2-arm64.dmg)  
-- **Intel:** [Dictaste-0.1.2-intel.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.2/Dictaste-0.1.2-intel.dmg)  
+- **Apple Silicon:** [Dictaste-0.1.3-arm64.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-0.1.3-arm64.dmg)  
+- **Intel:** [Dictaste-0.1.3-intel.dmg](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.3/Dictaste-0.1.3-intel.dmg)  
 - Also: [dictaste.vercel.app/download](https://dictaste.vercel.app/download)
 
 ### Option B — Build from source

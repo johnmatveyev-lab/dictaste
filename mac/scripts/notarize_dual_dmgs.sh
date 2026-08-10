@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 OUT="$ROOT/dist"
-VERSION="${MARKETING_VERSION:-0.1.2}"
+VERSION="${MARKETING_VERSION:-0.1.3}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-DictasteNotary}"
 
 # Resolve identity

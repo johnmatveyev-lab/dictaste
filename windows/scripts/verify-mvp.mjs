@@ -53,10 +53,15 @@ for (const s of [
   "transcribeWhisperCli",
   "session-complete",
   "/api/v1/polish",
+  "Help / Issues",
+  "Star for free Developer plan",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
   else fail(`main.js missing ${s}`);
 }
+
+if (/waitlist/i.test(main)) fail("waitlist copy still in main.js");
+else pass("no waitlist copy in main.js");
 
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");

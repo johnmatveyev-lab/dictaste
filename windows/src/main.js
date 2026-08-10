@@ -348,11 +348,20 @@ function openSettings() {
   });
 }
 
+function appVersion() {
+  try {
+    return app.getVersion() || require("../package.json").version || "0.1.0";
+  } catch {
+    return "0.1.0";
+  }
+}
+
 function createTray() {
   const img = makeTrayIcon();
   tray = new Tray(img);
+  const base = () => (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
   const menu = Menu.buildFromTemplate([
-    { label: "Dictaste", enabled: false },
+    { label: `Dictaste ${appVersion()}`, enabled: false },
     { type: "separator" },
     {
       label: "Toggle dictation (Ctrl+Shift+Space)",
@@ -361,11 +370,19 @@ function createTray() {
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
-      click: () => shell.openExternal(`${(cfg.apiBase || DEFAULT_API).replace(/\/$/, "")}/dashboard`),
+      click: () => shell.openExternal(`${base()}/dashboard`),
     },
     {
-      label: "Download / waitlist",
-      click: () => shell.openExternal(`${(cfg.apiBase || DEFAULT_API).replace(/\/$/, "")}/download`),
+      label: "Download page",
+      click: () => shell.openExternal(`${base()}/download`),
+    },
+    {
+      label: "Help / Issues",
+      click: () => shell.openExternal("https://github.com/johnmatveyev-lab/dictaste/issues"),
+    },
+    {
+      label: "Star for free Developer plan",
+      click: () => shell.openExternal("https://github.com/johnmatveyev-lab/dictaste"),
     },
     { type: "separator" },
     { label: "Quit Dictaste", click: () => app.quit() },
