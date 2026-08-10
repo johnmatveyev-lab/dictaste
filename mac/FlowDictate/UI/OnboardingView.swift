@@ -206,7 +206,7 @@ struct OnboardingView: View {
                 .font(.subheadline.weight(.semibold))
             VStack(alignment: .leading, spacing: 4) {
                 Text("1. Click below to open Accessibility settings.")
-                Text("2. Find every row named Dictaste or FlowDictate.")
+                Text("2. Find every row named Dictaste (and any duplicate entries).")
                 Text("3. Turn each OFF, then click the − button to remove them.")
                 Text("4. Click +, select Dictaste in /Applications, add it, turn ON.")
                 Text("5. Come back here and click Relaunch Dictaste.")
