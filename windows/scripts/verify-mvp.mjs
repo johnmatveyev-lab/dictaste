@@ -86,6 +86,10 @@ for (const s of [
   "seenWelcome",
   "ttsRate",
   "ttsVoice",
+  "ttsSapiVoice",
+  "listSapiVoices",
+  "copyLastTranscript",
+  "Copy last transcript",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -111,6 +115,16 @@ if (/id="ttsVoice"/i.test(settings)) {
   pass("settings.html has ttsVoice control");
 } else {
   fail("settings.html missing ttsVoice control");
+}
+if (/id="ttsSapiVoice"/i.test(settings)) {
+  pass("settings.html has ttsSapiVoice control");
+} else {
+  fail("settings.html missing ttsSapiVoice control");
+}
+if (/Copy last transcript/i.test(settings)) {
+  pass("settings.html has copy last transcript");
+} else {
+  fail("settings.html missing copy last transcript");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);

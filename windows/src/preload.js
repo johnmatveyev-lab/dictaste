@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   polishAndPaste: (t) => ipcRenderer.invoke("polish-and-paste", t),
   licenseStatus: () => ipcRenderer.invoke("license-status"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  listSapiVoices: () => ipcRenderer.invoke("list-sapi-voices"),
+  copyLastTranscript: () => ipcRenderer.invoke("copy-last-transcript"),
   readSelection: () => ipcRenderer.invoke("read-selection"),
   stopReading: () => ipcRenderer.invoke("stop-reading"),
   openExternal: (u) => ipcRenderer.invoke("open-external", u),

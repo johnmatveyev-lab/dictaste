@@ -83,7 +83,7 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Dictaste-Setup-0.1.10.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.10.zip) · highlight-to-speak (Ctrl+Shift+R)  
+- [Dictaste-Setup-0.1.12.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.12.zip) · SAPI voice/rate · copy last transcript · highlight-to-speak  
 - Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.4) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** (SmartScreen may warn) → tray → Settings → paste license  
 

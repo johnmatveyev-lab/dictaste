@@ -10,8 +10,9 @@
  *   · BYO OpenAI TTS when openAIKey set (Developer plan parity)
  *   · SAPI fallback
  * - Optional launch at login
- * - Settings: license, STT/TTS, SAPI rate, premium voice, quiet toasts
+ * - Settings: license, STT/TTS, SAPI rate/voice, premium voice, quiet toasts
  * - Silent startup update check (notifies only when behind)
+ * - Tray: copy last transcript
  */
 const {
   app,
@@ -58,6 +59,8 @@ function defaultConfig() {
     seenWelcome: false,
     /** Highlight-to-speak rate: -10..10 (SAPI) */
     ttsRate: 0,
+    /** Installed SAPI voice display name (empty = OS default) */
+    ttsSapiVoice: "",
     /**
      * system = free SAPI only
      * managed = try /api/v1/tts (Pro), then BYO, then SAPI
@@ -185,6 +188,8 @@ let reading = false;
 /** Active SAPI PowerShell child */
 let speakProc = null;
 let cfg = null;
+/** Last polished dictation (tray Copy last transcript) */
+let lastTranscript = "";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -230,17 +235,24 @@ function speakTextSapi(text) {
       return;
     }
     const rate = Math.max(-10, Math.min(10, Number(cfg?.ttsRate) || 0));
+    const voiceName = String(cfg?.ttsSapiVoice || "").trim();
+    const voiceLine = voiceName
+      ? `try { $s.SelectVoice('${voiceName.replace(/'/g, "''")}') } catch {}`
+      : "";
     const b64 = Buffer.from(trimmed, "utf8").toString("base64");
     const ps1 = path.join(app.getPath("temp"), `dictaste-speak-${Date.now()}.ps1`);
     const script = [
       "Add-Type -AssemblyName System.Speech",
       `$s = New-Object System.Speech.Synthesis.SpeechSynthesizer`,
       `$s.Rate = ${rate}`,
+      voiceLine,
       `$bytes = [Convert]::FromBase64String('${b64}')`,
       `$t = [Text.Encoding]::UTF8.GetString($bytes)`,
       `$s.Speak($t)`,
       "",
-    ].join("\r\n");
+    ]
+      .filter(Boolean)
+      .join("\r\n");
     fs.writeFileSync(ps1, script, "utf8");
     reading = true;
     setTrayLabel();
@@ -685,6 +697,75 @@ function cmpSemver(a, b) {
 }
 
 /**
+ * List installed Windows SAPI voices (display names).
+ * @returns {Promise<string[]>}
+ */
+function listSapiVoices() {
+  return new Promise((resolve) => {
+    if (!isWin()) {
+      resolve([]);
+      return;
+    }
+    const ps1 = path.join(app.getPath("temp"), `dictaste-voices-${Date.now()}.ps1`);
+    const script = [
+      "Add-Type -AssemblyName System.Speech",
+      "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+      "$s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }",
+      "",
+    ].join("\r\n");
+    try {
+      fs.writeFileSync(ps1, script, "utf8");
+    } catch {
+      resolve([]);
+      return;
+    }
+    const proc = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps1],
+      { windowsHide: true }
+    );
+    let out = "";
+    proc.stdout.on("data", (d) => {
+      out += String(d);
+    });
+    proc.on("error", () => {
+      try {
+        fs.unlinkSync(ps1);
+      } catch {
+        /* ignore */
+      }
+      resolve([]);
+    });
+    proc.on("close", () => {
+      try {
+        fs.unlinkSync(ps1);
+      } catch {
+        /* ignore */
+      }
+      const names = out
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      resolve(names);
+    });
+  });
+}
+
+function copyLastTranscript() {
+  const t = String(lastTranscript || "").trim();
+  if (!t) {
+    notify("No transcript yet — dictate first", { force: true });
+    return false;
+  }
+  clipboard.writeText(t);
+  notify(
+    t.length > 80 ? `Copied · ${t.slice(0, 77)}…` : `Copied · ${t}`,
+    { force: true }
+  );
+  return true;
+}
+
+/**
  * Probe live health.releases.windows for a newer Setup zip.
  * Opens download page when behind or on probe failure (unless silent).
  * @param {{ silent?: boolean }} [opts] silent=true: only notify/open when update available
@@ -1045,6 +1126,11 @@ function rebuildTrayMenu() {
       label: "Stop reading",
       click: () => stopSpeaking(),
     },
+    {
+      label: "Copy last transcript",
+      enabled: !!String(lastTranscript || "").trim(),
+      click: () => copyLastTranscript(),
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -1142,11 +1228,15 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
     const polished = await polishText(String(text || ""));
+    lastTranscript = polished;
+    rebuildTrayMenu();
     if (cfg.autoPaste !== false) pasteText(polished);
     return polished;
   });
   ipcMain.handle("license-status", async () => fetchLicenseStatus());
   ipcMain.handle("check-for-updates", async () => checkForUpdates());
+  ipcMain.handle("list-sapi-voices", async () => listSapiVoices());
+  ipcMain.handle("copy-last-transcript", () => copyLastTranscript());
   ipcMain.handle("read-selection", async () => {
     await toggleFlowRead();
     return { reading };
@@ -1206,6 +1296,8 @@ app.whenReady().then(() => {
     }
     broadcastStatus({ phase: "polishing", last: raw });
     const polished = await polishText(raw);
+    lastTranscript = polished;
+    rebuildTrayMenu();
     if (cfg.autoPaste !== false) pasteText(polished);
     broadcastStatus({ phase: "idle", last: polished });
     notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);

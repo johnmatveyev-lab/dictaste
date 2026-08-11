@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.11</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.12</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Speech rate + premium voice pickers below. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    SAPI voice + rate + premium neural pickers below. Tray → <em>Copy last transcript</em>. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -81,6 +81,14 @@
   <label>SAPI speech rate <span id="ttsRateVal" style="color:var(--lime)">0</span> (−10 slow · 10 fast)</label>
   <input id="ttsRate" type="range" min="-10" max="10" step="1" value="0" style="width:100%;accent-color:var(--lime);" />
 
+  <label>SAPI system voice (free · offline)</label>
+  <div class="row" style="margin-top:0;align-items:center;">
+    <select id="ttsSapiVoice" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+      <option value="">OS default</option>
+    </select>
+    <button type="button" id="refreshVoices" class="ghost">Refresh voices</button>
+  </div>
+
   <label>Premium neural voice (managed / BYO OpenAI)</label>
   <select id="ttsVoice" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value="alloy">alloy</option>
@@ -110,6 +118,7 @@
     <button id="save" class="ghost">Save</button>
     <button id="refreshPlan" class="ghost">Refresh plan</button>
     <button id="checkUpdates" class="ghost">Check updates</button>
+    <button id="copyLast" class="ghost">Copy last transcript</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
     <button id="unlock" class="ghost">Free developer unlock</button>
@@ -120,7 +129,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    SAPI rate + premium voice apply on next read. Startup silently checks for newer Setup builds.
+    SAPI voice/rate + premium voice apply on next read. Tray copies last transcript. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -200,6 +209,7 @@
       document.getElementById('openai').value = c.openAIKey || '';
       document.getElementById('whisperBin').value = c.whisperBin || '';
       document.getElementById('whisperModel').value = c.whisperModel || '';
+      await fillSapiVoices(c.ttsSapiVoice || '');
       window.dictaste.onStatus((s) => {
         listening = !!s.listening;
         document.getElementById('toggle').textContent = listening ? 'Stop dictation' : 'Start dictation';
@@ -229,6 +239,7 @@
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         ttsRate: Math.max(-10, Math.min(10, Number(document.getElementById('ttsRate').value) || 0)),
+        ttsSapiVoice: document.getElementById('ttsSapiVoice').value || '',
         ttsVoice: document.getElementById('ttsVoice').value || 'alloy',
         openAIKey: document.getElementById('openai').value.trim(),
         whisperBin: document.getElementById('whisperBin').value.trim(),
@@ -244,8 +255,49 @@
       if (again.licenseKey) await refreshPlan();
     }
 
+    async function fillSapiVoices(selected) {
+      const sel = document.getElementById('ttsSapiVoice');
+      const prev = selected != null ? selected : sel.value;
+      let voices = [];
+      try {
+        voices = (await window.dictaste.listSapiVoices()) || [];
+      } catch {
+        voices = [];
+      }
+      sel.innerHTML = '';
+      const def = document.createElement('option');
+      def.value = '';
+      def.textContent = 'OS default';
+      sel.appendChild(def);
+      for (const name of voices) {
+        const o = document.createElement('option');
+        o.value = name;
+        o.textContent = name;
+        sel.appendChild(o);
+      }
+      if (prev && ![...sel.options].some((o) => o.value === prev)) {
+        const o = document.createElement('option');
+        o.value = prev;
+        o.textContent = prev + ' (saved)';
+        sel.appendChild(o);
+      }
+      sel.value = prev || '';
+    }
+
     document.getElementById('ttsRate').oninput = () => {
       document.getElementById('ttsRateVal').textContent = document.getElementById('ttsRate').value;
+    };
+    document.getElementById('refreshVoices').onclick = async () => {
+      document.getElementById('status').textContent = 'Loading SAPI voices…';
+      await fillSapiVoices();
+      document.getElementById('status').textContent =
+        document.getElementById('ttsSapiVoice').options.length > 1
+          ? 'SAPI voices loaded'
+          : 'No SAPI voices found (Windows only)';
+    };
+    document.getElementById('copyLast').onclick = async () => {
+      const ok = await window.dictaste.copyLastTranscript();
+      document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
     };
     document.getElementById('save').onclick = save;
     document.getElementById('refreshPlan').onclick = async () => {
