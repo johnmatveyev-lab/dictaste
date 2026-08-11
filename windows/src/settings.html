@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.14</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.15</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Dictation language + SAPI voice/rate + recent transcripts (last 10). Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Dictation language · test voice · paste suffix · recent transcripts. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -63,6 +63,14 @@
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
   </div>
+
+  <label>After paste</label>
+  <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value=" ">Trailing space (default · chain dictations)</option>
+    <option value="">Nothing</option>
+    <option value="\n">New line</option>
+    <option value=". ">Period + space</option>
+  </select>
 
   <label>Speech-to-text engine</label>
   <select id="sttMode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
@@ -122,6 +130,9 @@
     <option value="nova">nova</option>
     <option value="shimmer">shimmer</option>
   </select>
+  <div class="row" style="margin-top:8px">
+    <button type="button" id="testVoice" class="ghost">Test voice</button>
+  </div>
 
   <label>OpenAI API key (Whisper STT + BYO premium TTS)</label>
   <input id="openai" type="password" placeholder="sk-… (Developer plan premium voices)" autocomplete="off" spellcheck="false" />
@@ -162,7 +173,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Dictation language applies to Web Speech and Whisper. SAPI voice/rate + premium voice apply on next read. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
+    Dictation language applies to Web Speech and Whisper. Test voice uses current engine/rate/voice. After-paste suffix chains dictations cleanly. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -229,6 +240,15 @@
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
+      {
+        const suf = c.pasteSuffix;
+        const el = document.getElementById('pasteSuffix');
+        if (suf === '' || suf === ' ' || suf === '\\n' || suf === '\n' || suf === '. ') {
+          el.value = suf === '\n' ? '\\n' : suf;
+        } else {
+          el.value = ' ';
+        }
+      }
       document.getElementById('hotkeyDictate').value =
         c.hotkeyDictateDisplay || c.hotkeyDictate || 'Ctrl+Shift+Space';
       document.getElementById('hotkeyRead').value =
@@ -299,6 +319,10 @@
         autoPaste: document.getElementById('autoPaste').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
         quietNotifications: document.getElementById('quietNotifications').checked,
+        pasteSuffix: (() => {
+          const v = document.getElementById('pasteSuffix').value;
+          return v === '\\n' ? '\n' : v;
+        })(),
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
@@ -364,6 +388,14 @@
     document.getElementById('copyLast').onclick = async () => {
       const ok = await window.dictaste.copyLastTranscript(0);
       document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
+    };
+    document.getElementById('testVoice').onclick = async () => {
+      await save();
+      document.getElementById('status').textContent = 'Testing voice…';
+      const r = await window.dictaste.testVoice();
+      document.getElementById('status').textContent = r?.ok
+        ? 'Voice test done · ' + (r.lang || '')
+        : (r?.error || 'Voice test failed');
     };
     document.getElementById('refreshHistory').onclick = async () => {
       await renderHistory();

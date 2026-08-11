@@ -14,6 +14,7 @@
  * - Silent startup update check (notifies only when behind)
  * - Tray: copy last transcript + recent history
  * - Web Speech language (BCP-47) selectable in Settings
+ * - Test voice (SAPI/premium) + paste suffix (space/newline/period)
  */
 const {
   app,
@@ -50,6 +51,11 @@ function defaultConfig() {
     licenseKey: "",
     polish: true,
     autoPaste: true,
+    /**
+     * Appended after polished dictation before paste.
+     * "" | " " | "\\n" | ". " (period+space)
+     */
+    pasteSuffix: " ",
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -999,10 +1005,25 @@ function transcribeWhisperCli(wavPath) {
   });
 }
 
+function applyPasteSuffix(text) {
+  const t = String(text || "");
+  if (!t) return t;
+  const suf = cfg?.pasteSuffix;
+  if (suf == null || suf === " ") return t.endsWith(" ") ? t : t + " ";
+  if (suf === "") return t;
+  if (suf === "\n" || suf === "\\n") return t.endsWith("\n") ? t : t + "\n";
+  if (suf === ". " || suf === "period") {
+    if (/[.!?…]\s*$/.test(t)) return t.endsWith(" ") ? t : t + " ";
+    return t.replace(/\s*$/, "") + ". ";
+  }
+  return t + String(suf);
+}
+
 function pasteText(text) {
   if (!text) return;
+  const payload = applyPasteSuffix(text);
   const prev = clipboard.readText();
-  clipboard.writeText(text);
+  clipboard.writeText(payload);
   // Windows: SendKeys Ctrl+V into focused window
   exec(
     `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 80; [System.Windows.Forms.SendKeys]::SendWait('^v')"`,
@@ -1010,6 +1031,43 @@ function pasteText(text) {
       setTimeout(() => clipboard.writeText(prev), 500);
     }
   );
+}
+
+const TEST_VOICE_SAMPLES = {
+  "en-US": "Dictaste is ready. Speak it. Ship it.",
+  "en-GB": "Dictaste is ready. Speak it. Ship it.",
+  "en-AU": "Dictaste is ready. Speak it. Ship it.",
+  "es-ES": "Dictaste está listo. Habla y envía.",
+  "es-MX": "Dictaste está listo. Habla y envía.",
+  "fr-FR": "Dictaste est prêt. Parlez et expédiez.",
+  "de-DE": "Dictaste ist bereit. Sprechen und senden.",
+  "pt-BR": "Dictaste está pronto. Fale e envie.",
+  "pt-PT": "Dictaste está pronto. Fale e envie.",
+  "it-IT": "Dictaste è pronto. Parla e spedisci.",
+  "nl-NL": "Dictaste is klaar. Spreek en verstuur.",
+  "pl-PL": "Dictaste jest gotowy. Mów i wysyłaj.",
+  "uk-UA": "Dictaste готовий. Говоріть і надсилайте.",
+  "ru-RU": "Dictaste готов. Говорите и отправляйте.",
+  "ja-JP": "ディクテイストの準備ができました。",
+  "ko-KR": "딕테이스트가 준비되었습니다.",
+  "zh-CN": "Dictaste 已就绪。说出来，交付出去。",
+  "zh-TW": "Dictaste 已就緒。說出來，交付出去。",
+  "hi-IN": "डिक्टेस्ट तैयार है। बोलें और भेजें।",
+  "ar-SA": "ديكتاست جاهز. تكلم وأرسل.",
+};
+
+async function testVoice() {
+  const lang = cfg?.sttLang || "en-US";
+  const sample =
+    TEST_VOICE_SAMPLES[lang] || TEST_VOICE_SAMPLES["en-US"];
+  try {
+    notify(`Testing voice · ${lang}`, { force: true });
+    await speakText(sample);
+    return { ok: true, sample, lang };
+  } catch (e) {
+    notify(`Test voice failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
 }
 
 /**
@@ -1175,6 +1233,12 @@ function rebuildTrayMenu() {
       click: () => copyLastTranscript(0),
     },
     {
+      label: "Test voice",
+      click: () => {
+        testVoice().catch(() => {});
+      },
+    },
+    {
       label: "Recent transcripts",
       enabled: normalizeHistory(cfg?.history).length > 0,
       submenu: (() => {
@@ -1292,6 +1356,7 @@ app.whenReady().then(() => {
   ipcMain.handle("license-status", async () => fetchLicenseStatus());
   ipcMain.handle("check-for-updates", async () => checkForUpdates());
   ipcMain.handle("list-sapi-voices", async () => listSapiVoices());
+  ipcMain.handle("test-voice", async () => testVoice());
   ipcMain.handle("copy-last-transcript", (_e, index) =>
     copyLastTranscript(Number(index) || 0)
   );

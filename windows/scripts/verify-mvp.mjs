@@ -95,6 +95,10 @@ for (const s of [
   "get-history",
   "clear-history",
   "sttLang",
+  "pasteSuffix",
+  "applyPasteSuffix",
+  "testVoice",
+  "test-voice",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -140,6 +144,16 @@ if (/id="sttLang"/i.test(settings)) {
   pass("settings.html has sttLang control");
 } else {
   fail("settings.html missing sttLang control");
+}
+if (/id="pasteSuffix"/i.test(settings)) {
+  pass("settings.html has pasteSuffix control");
+} else {
+  fail("settings.html missing pasteSuffix control");
+}
+if (/id="testVoice"|Test voice/i.test(settings)) {
+  pass("settings.html has test voice");
+} else {
+  fail("settings.html missing test voice");
 }
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {

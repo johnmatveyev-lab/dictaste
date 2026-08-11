@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   licenseStatus: () => ipcRenderer.invoke("license-status"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   listSapiVoices: () => ipcRenderer.invoke("list-sapi-voices"),
+  testVoice: () => ipcRenderer.invoke("test-voice"),
   copyLastTranscript: (index) => ipcRenderer.invoke("copy-last-transcript", index),
   getHistory: () => ipcRenderer.invoke("get-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),
