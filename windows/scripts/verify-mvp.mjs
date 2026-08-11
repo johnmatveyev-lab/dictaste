@@ -84,6 +84,9 @@ for (const s of [
   "Star on GitHub",
   "Check for updates",
   "seenWelcome",
+  "ttsRate",
+  "ttsVoice",
+  "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
   else fail(`main.js missing ${s}`);
@@ -98,6 +101,16 @@ if (/id="ttsEngine"|ttsEngine/i.test(settings)) {
   pass("settings.html has ttsEngine control");
 } else {
   fail("settings.html missing ttsEngine control");
+}
+if (/id="ttsRate"/i.test(settings)) {
+  pass("settings.html has ttsRate control");
+} else {
+  fail("settings.html missing ttsRate control");
+}
+if (/id="ttsVoice"/i.test(settings)) {
+  pass("settings.html has ttsVoice control");
+} else {
+  fail("settings.html missing ttsVoice control");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);

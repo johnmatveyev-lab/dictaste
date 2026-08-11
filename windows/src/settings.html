@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.10</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.11</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Speech rate + premium voice pickers below. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -71,11 +71,24 @@
     <option value="whisper-cli">Offline whisper.cpp CLI (path below)</option>
   </select>
 
-  <label>Highlight-to-speak voice</label>
+  <label>Highlight-to-speak engine</label>
   <select id="ttsEngine" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value="auto">Auto (premium if Pro license · else system)</option>
     <option value="system">System SAPI only (free · offline)</option>
     <option value="managed">Prefer managed premium (Pro · falls back to system)</option>
+  </select>
+
+  <label>SAPI speech rate <span id="ttsRateVal" style="color:var(--lime)">0</span> (−10 slow · 10 fast)</label>
+  <input id="ttsRate" type="range" min="-10" max="10" step="1" value="0" style="width:100%;accent-color:var(--lime);" />
+
+  <label>Premium neural voice (managed / BYO OpenAI)</label>
+  <select id="ttsVoice" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="alloy">alloy</option>
+    <option value="echo">echo</option>
+    <option value="fable">fable</option>
+    <option value="onyx">onyx</option>
+    <option value="nova">nova</option>
+    <option value="shimmer">shimmer</option>
   </select>
 
   <label>OpenAI API key (Whisper STT + BYO premium TTS)</label>
@@ -107,6 +120,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
+    SAPI rate + premium voice apply on next read. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -179,6 +193,10 @@
         c.hotkeyReadDisplay || c.hotkeyRead || 'Ctrl+Shift+R';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
+      const rate = Math.max(-10, Math.min(10, Number(c.ttsRate) || 0));
+      document.getElementById('ttsRate').value = String(rate);
+      document.getElementById('ttsRateVal').textContent = String(rate);
+      document.getElementById('ttsVoice').value = c.ttsVoice || 'alloy';
       document.getElementById('openai').value = c.openAIKey || '';
       document.getElementById('whisperBin').value = c.whisperBin || '';
       document.getElementById('whisperModel').value = c.whisperModel || '';
@@ -210,6 +228,8 @@
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
+        ttsRate: Math.max(-10, Math.min(10, Number(document.getElementById('ttsRate').value) || 0)),
+        ttsVoice: document.getElementById('ttsVoice').value || 'alloy',
         openAIKey: document.getElementById('openai').value.trim(),
         whisperBin: document.getElementById('whisperBin').value.trim(),
         whisperModel: document.getElementById('whisperModel').value.trim(),
@@ -224,6 +244,9 @@
       if (again.licenseKey) await refreshPlan();
     }
 
+    document.getElementById('ttsRate').oninput = () => {
+      document.getElementById('ttsRateVal').textContent = document.getElementById('ttsRate').value;
+    };
     document.getElementById('save').onclick = save;
     document.getElementById('refreshPlan').onclick = async () => {
       await save();

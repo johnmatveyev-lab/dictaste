@@ -10,7 +10,8 @@
  *   · BYO OpenAI TTS when openAIKey set (Developer plan parity)
  *   · SAPI fallback
  * - Optional launch at login
- * - Settings for license key + API base
+ * - Settings: license, STT/TTS, SAPI rate, premium voice, quiet toasts
+ * - Silent startup update check (notifies only when behind)
  */
 const {
   app,
@@ -685,9 +686,11 @@ function cmpSemver(a, b) {
 
 /**
  * Probe live health.releases.windows for a newer Setup zip.
- * Opens download page when behind or on probe failure.
+ * Opens download page when behind or on probe failure (unless silent).
+ * @param {{ silent?: boolean }} [opts] silent=true: only notify/open when update available
  */
-async function checkForUpdates() {
+async function checkForUpdates(opts = {}) {
+  const silent = !!opts.silent;
   const base = (cfg?.apiBase || DEFAULT_API).replace(/\/$/, "");
   const local = appVersion();
   try {
@@ -695,16 +698,20 @@ async function checkForUpdates() {
       method: "GET",
     });
     if (status !== 200 || !json?.ok) {
-      notify(`Dictaste ${local} · could not check updates — opening download page`);
-      shell.openExternal(`${base}/download`);
+      if (!silent) {
+        notify(`Dictaste ${local} · could not check updates — opening download page`);
+        shell.openExternal(`${base}/download`);
+      }
       return { ok: false, local };
     }
     const file = json.releases?.windows?.file || "";
     const m = file.match(/Dictaste-Setup-(\d+\.\d+\.\d+)/i);
     const remote = m?.[1] || null;
     if (!remote) {
-      notify(`Dictaste ${local} · no Windows release in health — opening download page`);
-      shell.openExternal(`${base}/download`);
+      if (!silent) {
+        notify(`Dictaste ${local} · no Windows release in health — opening download page`);
+        shell.openExternal(`${base}/download`);
+      }
       return { ok: true, local, remote: null };
     }
     const cmp = cmpSemver(local, remote);
@@ -715,6 +722,9 @@ async function checkForUpdates() {
       shell.openExternal(`${base}/download`);
       return { ok: true, local, remote, update: true };
     }
+    if (silent) {
+      return { ok: true, local, remote, update: false, silent: true };
+    }
     if (cmp === 0) {
       notify(`Dictaste ${local} is up to date.`, { force: true });
       return { ok: true, local, remote, update: false };
@@ -722,6 +732,9 @@ async function checkForUpdates() {
     notify(`Dictaste ${local} (newer than site ${remote}).`, { force: true });
     return { ok: true, local, remote, update: false, ahead: true };
   } catch (e) {
+    if (silent) {
+      return { ok: false, local, error: String(e?.message || e), silent: true };
+    }
     notify(`Update check failed — opening download page`, { force: true });
     try {
       shell.openExternal(`${base}/download`);
@@ -1212,6 +1225,11 @@ app.whenReady().then(() => {
       saveConfig(cfg);
     }, 1200);
   }
+
+  // Silent startup update check — only notifies when a newer Setup is live
+  setTimeout(() => {
+    checkForUpdates({ silent: true }).catch(() => {});
+  }, 8000);
 });
 
 app.on("will-quit", () => {
