@@ -47,6 +47,8 @@ function defaultConfig() {
     /** Absolute path to whisper.cpp `whisper-cli` or `main` binary (optional offline) */
     whisperBin: "",
     whisperModel: "",
+    /** First-run welcome notification shown once */
+    seenWelcome: false,
   };
 }
 
@@ -385,6 +387,13 @@ function createTray() {
       click: () => shell.openExternal(`${base()}/download`),
     },
     {
+      label: "Check for updates…",
+      click: () => {
+        notify(`Dictaste ${appVersion()} · opening download page for latest Mac/Windows builds`);
+        shell.openExternal(`${base()}/download`);
+      },
+    },
+    {
       label: "Help / Issues",
       click: () => shell.openExternal("https://github.com/johnmatveyev-lab/dictaste/issues"),
     },
@@ -474,9 +483,18 @@ app.whenReady().then(() => {
     return { polished };
   });
 
-  // First-run: open settings so license can be pasted
+  // First-run: open settings so license can be pasted + welcome toast
   if (!cfg.licenseKey) {
     setTimeout(() => openSettings(), 400);
+  }
+  if (!cfg.seenWelcome) {
+    setTimeout(() => {
+      notify(
+        `Welcome · Dictaste ${appVersion()}. Hotkey Ctrl+Shift+Space. Paste your license in Settings.`
+      );
+      cfg.seenWelcome = true;
+      saveConfig(cfg);
+    }, 1200);
   }
 });
 

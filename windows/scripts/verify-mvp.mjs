@@ -58,6 +58,8 @@ for (const s of [
   "/developers/setup",
   "/pricing",
   "Star on GitHub",
+  "Check for updates",
+  "seenWelcome",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
   else fail(`main.js missing ${s}`);
