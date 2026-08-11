@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.5</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.6</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     <span class="kbd">Ctrl+Shift+Space</span> dictate anywhere → polish → paste.<br />
     <span class="kbd">Ctrl+Shift+R</span> highlight-to-speak — select text or clipboard; same hotkey stops.
-    Free system voices always; Pro managed premium TTS when licensed.
+    Voices: free SAPI · Pro managed neural · Developer BYO OpenAI (paste key below).
     Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
@@ -47,6 +47,7 @@
   <div class="checks">
     <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
+    <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
   </div>
 
   <label>Speech-to-text engine</label>
@@ -63,8 +64,8 @@
     <option value="managed">Prefer managed premium (Pro · falls back to system)</option>
   </select>
 
-  <label>OpenAI API key (for Whisper STT mode)</label>
-  <input id="openai" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+  <label>OpenAI API key (Whisper STT + BYO premium TTS)</label>
+  <input id="openai" type="password" placeholder="sk-… (Developer plan premium voices)" autocomplete="off" spellcheck="false" />
 
   <label>whisper-cli binary path (offline)</label>
   <input id="whisperBin" placeholder="C:\tools\whisper-cli.exe" />
@@ -89,7 +90,8 @@
   <p class="hint">
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
-    Highlight-to-speak: free Windows SAPI always; Pro managed neural TTS via the same API as Mac when engine is Auto/Managed.
+    Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
+    Launch-at-login keeps the tray hotkeys ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     · docs in the monorepo <code>docs/INSTALL_WINDOWS.md</code>.
@@ -104,6 +106,7 @@
       document.getElementById('api').value = c.apiBase || 'https://dictaste.vercel.app';
       document.getElementById('polish').checked = c.polish !== false;
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
+      document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
       document.getElementById('openai').value = c.openAIKey || '';
@@ -130,6 +133,7 @@
         apiBase: document.getElementById('api').value.trim() || 'https://dictaste.vercel.app',
         polish: document.getElementById('polish').checked,
         autoPaste: document.getElementById('autoPaste').checked,
+        launchAtLogin: document.getElementById('launchAtLogin').checked,
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         openAIKey: document.getElementById('openai').value.trim(),

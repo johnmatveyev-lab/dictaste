@@ -6,7 +6,10 @@
  * - Auto polish via /api/v1/polish + paste (Ctrl+V) on stop
  * - Highlight-to-speak: Ctrl+Shift+R → selection/clipboard
  *   · free system SAPI voices
- *   · optional managed premium TTS via /api/v1/tts (Pro) with SAPI fallback
+ *   · managed premium TTS via /api/v1/tts (Pro)
+ *   · BYO OpenAI TTS when openAIKey set (Developer plan parity)
+ *   · SAPI fallback
+ * - Optional launch at login
  * - Settings for license key + API base
  */
 const {
@@ -56,12 +59,14 @@ function defaultConfig() {
     ttsRate: 0,
     /**
      * system = free SAPI only
-     * managed = try /api/v1/tts (Pro), fall back to SAPI
-     * auto = managed when license present, else system
+     * managed = try /api/v1/tts (Pro), then BYO, then SAPI
+     * auto = managed/BYO when keys present, else system
      */
     ttsEngine: "auto",
-    /** OpenAI-compatible voice name for managed TTS */
+    /** OpenAI-compatible voice name for managed / BYO TTS */
     ttsVoice: "alloy",
+    /** Start Dictaste when Windows signs in */
+    launchAtLogin: false,
   };
 }
 
@@ -262,7 +267,7 @@ function playMp3File(mp3Path) {
 
 /**
  * Managed premium TTS via Dictaste /api/v1/tts (Pro plans).
- * Returns true if audio played; false if should fall back to SAPI.
+ * Returns true if audio played; false if should fall back (BYO/SAPI).
  */
 async function speakTextManaged(text) {
   const trimmed = String(text || "").trim();
@@ -270,7 +275,7 @@ async function speakTextManaged(text) {
   if (!cfg.licenseKey) return false;
 
   const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
-  broadcastStatus({ phase: "tts", reading: false });
+  broadcastStatus({ phase: "tts", reading: false, engine: "managed" });
   const { status, json } = await requestJson(`${base}/api/v1/tts`, {
     method: "POST",
     headers: {
@@ -283,15 +288,14 @@ async function speakTextManaged(text) {
   });
 
   if (status === 402 || status === 403) {
-    // Free / Dev → use system voice; do not toast as error
+    // Free / Dev → try BYO next; do not toast as error
     return false;
   }
   if (status === 401) {
-    notify("License invalid for premium voices — using system voice");
+    notify("License invalid for premium voices — trying other engines");
     return false;
   }
   if (status !== 200 || !json?.audioBase64) {
-    notify(`Premium TTS unavailable (${status}) — system voice`);
     return false;
   }
 
@@ -301,21 +305,129 @@ async function speakTextManaged(text) {
   return true;
 }
 
-/** Resolve preferred engine and speak (managed → SAPI fallback). */
+/**
+ * BYO OpenAI TTS (Developer plan parity — uses user's key, never our bill).
+ * Returns true if audio played. Speech endpoint returns raw MP3 bytes.
+ */
+async function speakTextByoOpenAI(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new Error("Nothing to read");
+  const key = (cfg.openAIKey || "").trim();
+  if (!key) return false;
+
+  broadcastStatus({ phase: "tts", reading: false, engine: "byo" });
+  const body = JSON.stringify({
+    model: "gpt-4o-mini-tts",
+    voice: cfg.ttsVoice || "alloy",
+    input: trimmed.slice(0, 4000),
+    response_format: "mp3",
+  });
+  let bin = await requestBinary("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body,
+  });
+  // Older keys / regions: fall back to classic tts-1
+  if (!bin.ok) {
+    bin = await requestBinary("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        voice: cfg.ttsVoice || "alloy",
+        input: trimmed.slice(0, 4000),
+        response_format: "mp3",
+      }),
+    });
+  }
+  if (!bin.ok || !bin.buffer?.length) {
+    if (bin.status === 401) notify("OpenAI key rejected for TTS — system voice");
+    return false;
+  }
+  const mp3Path = path.join(app.getPath("temp"), `dictaste-byo-${Date.now()}.mp3`);
+  fs.writeFileSync(mp3Path, bin.buffer);
+  await playMp3File(mp3Path);
+  return true;
+}
+
+function requestBinary(url, { method = "GET", headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const lib = u.protocol === "https:" ? https : http;
+    const req = lib.request(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        port: u.port || (u.protocol === "https:" ? 443 : 80),
+        method,
+        headers: {
+          ...headers,
+          ...(body
+            ? { "Content-Length": Buffer.byteLength(body) }
+            : {}),
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          resolve({
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode,
+            buffer: Buffer.concat(chunks),
+          });
+        });
+      }
+    );
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+/** Resolve preferred engine and speak (managed → BYO → SAPI). */
 async function speakText(text) {
   const engine = cfg.ttsEngine || "auto";
-  const tryManaged =
-    engine === "managed" || (engine === "auto" && Boolean(cfg.licenseKey));
+  const tryNeural =
+    engine === "managed" ||
+    (engine === "auto" && (Boolean(cfg.licenseKey) || Boolean(cfg.openAIKey)));
 
-  if (tryManaged) {
-    try {
-      const ok = await speakTextManaged(text);
-      if (ok) return;
-    } catch (e) {
-      notify(`Premium TTS failed — system voice (${e.message || e})`);
+  if (tryNeural) {
+    if (cfg.licenseKey) {
+      try {
+        if (await speakTextManaged(text)) return;
+      } catch (e) {
+        /* fall through to BYO/SAPI */
+      }
+    }
+    if (cfg.openAIKey) {
+      try {
+        if (await speakTextByoOpenAI(text)) return;
+      } catch (e) {
+        notify(`BYO TTS failed — system voice (${e.message || e})`);
+      }
     }
   }
   await speakTextSapi(text);
+}
+
+function applyLaunchAtLogin(enabled) {
+  try {
+    if (typeof app.setLoginItemSettings === "function") {
+      app.setLoginItemSettings({
+        openAtLogin: Boolean(enabled),
+        path: process.execPath,
+      });
+    }
+  } catch {
+    /* ignore on non-packaged / unsupported */
+  }
 }
 
 /**
@@ -731,6 +843,7 @@ function createTray() {
 
 app.whenReady().then(() => {
   cfg = loadConfig();
+  applyLaunchAtLogin(cfg.launchAtLogin);
   createTray();
   ensureHud();
   globalShortcut.register("CommandOrControl+Shift+Space", () => toggleListen());
@@ -742,6 +855,9 @@ app.whenReady().then(() => {
   ipcMain.handle("save-config", (_e, next) => {
     cfg = { ...cfg, ...next };
     saveConfig(cfg);
+    if (Object.prototype.hasOwnProperty.call(next || {}, "launchAtLogin")) {
+      applyLaunchAtLogin(cfg.launchAtLogin);
+    }
     return cfg;
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
