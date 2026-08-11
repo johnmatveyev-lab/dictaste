@@ -8,7 +8,7 @@ enum CloudPolisher {
            let url = URL(string: custom), !custom.isEmpty {
             return url
         }
-        // Staging / Vercel until custom domain is live
+        // Production API (custom domain optional later)
         return URL(string: "https://dictaste.vercel.app")!
     }
 

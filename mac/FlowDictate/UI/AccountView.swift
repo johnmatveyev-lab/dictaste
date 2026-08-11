@@ -82,7 +82,7 @@ struct AccountView: View {
                     }
                 }
                 .disabled(refreshing || licenseKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Link("Upgrade / manage plan…", destination: URL(string: "https://dictaste.vercel.app/#pricing")!)
+                Link("Upgrade / manage plan…", destination: URL(string: "https://dictaste.vercel.app/pricing")!)
             }
 
             Section("License & polish") {
