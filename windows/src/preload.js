@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   saveConfig: (c) => ipcRenderer.invoke("save-config", c),
   polishAndPaste: (t) => ipcRenderer.invoke("polish-and-paste", t),
   licenseStatus: () => ipcRenderer.invoke("license-status"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   readSelection: () => ipcRenderer.invoke("read-selection"),
   stopReading: () => ipcRenderer.invoke("stop-reading"),
   openExternal: (u) => ipcRenderer.invoke("open-external", u),

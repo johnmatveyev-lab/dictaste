@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.8</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.9</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
@@ -95,6 +95,7 @@
     <button id="stopRead" class="ghost">Stop reading</button>
     <button id="save" class="ghost">Save</button>
     <button id="refreshPlan" class="ghost">Refresh plan</button>
+    <button id="checkUpdates" class="ghost">Check updates</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
     <button id="unlock" class="ghost">Free developer unlock</button>
@@ -224,6 +225,15 @@
     document.getElementById('refreshPlan').onclick = async () => {
       await save();
       await refreshPlan();
+    };
+    document.getElementById('checkUpdates').onclick = async () => {
+      document.getElementById('status').textContent = 'Checking updates…';
+      const r = await window.dictaste.checkForUpdates();
+      if (r?.update) document.getElementById('status').textContent = `Update ${r.local} → ${r.remote}`;
+      else if (r?.ok) document.getElementById('status').textContent = r.ahead
+        ? `Ahead of site (${r.local})`
+        : `Up to date (${r.local})`;
+      else document.getElementById('status').textContent = 'Update check failed';
     };
     document.getElementById('toggle').onclick = async () => {
       await save();

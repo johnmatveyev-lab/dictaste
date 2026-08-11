@@ -620,10 +620,107 @@ async function polishText(text) {
       body: { text },
     });
     if (status === 200 && json.text) return json.text;
+    if (status === 402) {
+      const msg =
+        json?.error ||
+        "Polish quota reached — upgrade to Pro for more managed polish.";
+      notify(msg);
+      const upgrade =
+        json?.upgradeUrl || `${base}/pricing`;
+      try {
+        shell.openExternal(upgrade);
+      } catch {
+        /* ignore */
+      }
+      broadcastStatus({ phase: "idle", error: msg, code: json?.code || "quota" });
+      return text;
+    }
+    if (status === 403 && json?.code === "byo_only") {
+      const msg =
+        json?.error ||
+        "Developer plan is BYO LLM — add your API key in Settings, or upgrade for managed polish.";
+      notify(msg);
+      broadcastStatus({ phase: "idle", error: msg, code: "byo_only" });
+      return text;
+    }
+    if (status === 401) {
+      notify("License invalid — paste a valid key in Settings or re-unlock on the site.");
+      broadcastStatus({ phase: "idle", error: "Invalid license", code: "auth" });
+      return text;
+    }
   } catch {
     /* keep raw */
   }
   return text;
+}
+
+/** Compare semver-ish x.y.z — returns -1 / 0 / 1 */
+function cmpSemver(a, b) {
+  const pa = String(a || "0")
+    .replace(/^v/i, "")
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || "0")
+    .replace(/^v/i, "")
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x < y) return -1;
+    if (x > y) return 1;
+  }
+  return 0;
+}
+
+/**
+ * Probe live health.releases.windows for a newer Setup zip.
+ * Opens download page when behind or on probe failure.
+ */
+async function checkForUpdates() {
+  const base = (cfg?.apiBase || DEFAULT_API).replace(/\/$/, "");
+  const local = appVersion();
+  try {
+    const { status, json } = await requestJson(`${base}/api/health`, {
+      method: "GET",
+    });
+    if (status !== 200 || !json?.ok) {
+      notify(`Dictaste ${local} · could not check updates — opening download page`);
+      shell.openExternal(`${base}/download`);
+      return { ok: false, local };
+    }
+    const file = json.releases?.windows?.file || "";
+    const m = file.match(/Dictaste-Setup-(\d+\.\d+\.\d+)/i);
+    const remote = m?.[1] || null;
+    if (!remote) {
+      notify(`Dictaste ${local} · no Windows release in health — opening download page`);
+      shell.openExternal(`${base}/download`);
+      return { ok: true, local, remote: null };
+    }
+    const cmp = cmpSemver(local, remote);
+    if (cmp < 0) {
+      notify(`Update available: ${local} → ${remote}. Opening download…`);
+      shell.openExternal(`${base}/download`);
+      return { ok: true, local, remote, update: true };
+    }
+    if (cmp === 0) {
+      notify(`Dictaste ${local} is up to date.`);
+      return { ok: true, local, remote, update: false };
+    }
+    notify(`Dictaste ${local} (newer than site ${remote}).`);
+    return { ok: true, local, remote, update: false, ahead: true };
+  } catch (e) {
+    notify(`Update check failed — opening download page`);
+    try {
+      shell.openExternal(`${base}/download`);
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, local, error: String(e.message || e) };
+  }
 }
 
 /**
@@ -941,8 +1038,7 @@ function rebuildTrayMenu() {
     {
       label: "Check for updates…",
       click: () => {
-        notify(`Dictaste ${appVersion()} · opening download page for latest Mac/Windows builds`);
-        shell.openExternal(`${base()}/download`);
+        checkForUpdates().catch(() => {});
       },
     },
     {
@@ -1023,6 +1119,7 @@ app.whenReady().then(() => {
     return polished;
   });
   ipcMain.handle("license-status", async () => fetchLicenseStatus());
+  ipcMain.handle("check-for-updates", async () => checkForUpdates());
   ipcMain.handle("read-selection", async () => {
     await toggleFlowRead();
     return { reading };
