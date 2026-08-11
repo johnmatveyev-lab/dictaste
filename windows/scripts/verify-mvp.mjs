@@ -72,6 +72,7 @@ for (const s of [
   "checkForUpdates",
   "cmpSemver",
   "upgradeUrl",
+  "quietNotifications",
   "transcribeOpenAI",
   "transcribeWhisperCli",
   "session-complete",

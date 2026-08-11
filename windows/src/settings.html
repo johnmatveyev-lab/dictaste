@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.9</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.10</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
@@ -61,6 +61,7 @@
     <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
+    <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
   </div>
 
   <label>Speech-to-text engine</label>
@@ -171,6 +172,7 @@
       document.getElementById('polish').checked = c.polish !== false;
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
+      document.getElementById('quietNotifications').checked = !!c.quietNotifications;
       document.getElementById('hotkeyDictate').value =
         c.hotkeyDictateDisplay || c.hotkeyDictate || 'Ctrl+Shift+Space';
       document.getElementById('hotkeyRead').value =
@@ -203,6 +205,7 @@
         polish: document.getElementById('polish').checked,
         autoPaste: document.getElementById('autoPaste').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
+        quietNotifications: document.getElementById('quietNotifications').checked,
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         sttMode: document.getElementById('sttMode').value || 'webspeech',

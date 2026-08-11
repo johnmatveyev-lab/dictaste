@@ -67,6 +67,11 @@ function defaultConfig() {
     ttsVoice: "alloy",
     /** Start Dictaste when Windows signs in */
     launchAtLogin: false,
+    /**
+     * Quiet mode: suppress routine toasts (reading started, welcome, etc.).
+     * Errors, quota, and update prompts still notify.
+     */
+    quietNotifications: false,
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
@@ -624,7 +629,7 @@ async function polishText(text) {
       const msg =
         json?.error ||
         "Polish quota reached — upgrade to Pro for more managed polish.";
-      notify(msg);
+      notify(msg, { force: true });
       const upgrade =
         json?.upgradeUrl || `${base}/pricing`;
       try {
@@ -639,12 +644,14 @@ async function polishText(text) {
       const msg =
         json?.error ||
         "Developer plan is BYO LLM — add your API key in Settings, or upgrade for managed polish.";
-      notify(msg);
+      notify(msg, { force: true });
       broadcastStatus({ phase: "idle", error: msg, code: "byo_only" });
       return text;
     }
     if (status === 401) {
-      notify("License invalid — paste a valid key in Settings or re-unlock on the site.");
+      notify("License invalid — paste a valid key in Settings or re-unlock on the site.", {
+        force: true,
+      });
       broadcastStatus({ phase: "idle", error: "Invalid license", code: "auth" });
       return text;
     }
@@ -702,18 +709,20 @@ async function checkForUpdates() {
     }
     const cmp = cmpSemver(local, remote);
     if (cmp < 0) {
-      notify(`Update available: ${local} → ${remote}. Opening download…`);
+      notify(`Update available: ${local} → ${remote}. Opening download…`, {
+        force: true,
+      });
       shell.openExternal(`${base}/download`);
       return { ok: true, local, remote, update: true };
     }
     if (cmp === 0) {
-      notify(`Dictaste ${local} is up to date.`);
+      notify(`Dictaste ${local} is up to date.`, { force: true });
       return { ok: true, local, remote, update: false };
     }
-    notify(`Dictaste ${local} (newer than site ${remote}).`);
+    notify(`Dictaste ${local} (newer than site ${remote}).`, { force: true });
     return { ok: true, local, remote, update: false, ahead: true };
   } catch (e) {
-    notify(`Update check failed — opening download page`);
+    notify(`Update check failed — opening download page`, { force: true });
     try {
       shell.openExternal(`${base}/download`);
     } catch {
@@ -867,8 +876,13 @@ function pasteText(text) {
   );
 }
 
-function notify(body) {
+/**
+ * @param {string} body
+ * @param {{ force?: boolean }} [opts] force=true bypasses quietNotifications
+ */
+function notify(body, opts = {}) {
   try {
+    if (cfg?.quietNotifications && !opts.force) return;
     if (Notification.isSupported()) {
       new Notification({ title: "Dictaste", body }).show();
     }
