@@ -373,6 +373,14 @@ function createTray() {
       click: () => shell.openExternal(`${base()}/dashboard`),
     },
     {
+      label: "Unlock free Developer plan",
+      click: () => shell.openExternal(`${base()}/developers/setup`),
+    },
+    {
+      label: "Pricing",
+      click: () => shell.openExternal(`${base()}/pricing`),
+    },
+    {
       label: "Download page",
       click: () => shell.openExternal(`${base()}/download`),
     },
@@ -381,7 +389,7 @@ function createTray() {
       click: () => shell.openExternal("https://github.com/johnmatveyev-lab/dictaste/issues"),
     },
     {
-      label: "Star for free Developer plan",
+      label: "Star on GitHub",
       click: () => shell.openExternal("https://github.com/johnmatveyev-lab/dictaste"),
     },
     { type: "separator" },

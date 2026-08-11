@@ -54,7 +54,10 @@ for (const s of [
   "session-complete",
   "/api/v1/polish",
   "Help / Issues",
-  "Star for free Developer plan",
+  "Unlock free Developer plan",
+  "/developers/setup",
+  "/pricing",
+  "Star on GitHub",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
   else fail(`main.js missing ${s}`);

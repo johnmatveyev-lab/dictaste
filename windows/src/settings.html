@@ -33,6 +33,7 @@
   <p class="hint">
     Press <span class="kbd">Ctrl+Shift+Space</span> anywhere to start dictation.
     Release path: stop with the same hotkey → AI polish (if licensed) → paste into the focused app.
+    Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -71,13 +72,15 @@
     <button id="save" class="ghost">Save</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
+    <button id="unlock" class="ghost">Free developer unlock</button>
     <button id="help" class="ghost">Help / Issues</button>
   </div>
 
   <p class="hint">
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for W1 quality path.
-    Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+    Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
+    · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     · docs in the monorepo <code>docs/INSTALL_WINDOWS.md</code>.
   </p>
 
@@ -137,6 +140,10 @@
     document.getElementById('dash').onclick = () => {
       const api = document.getElementById('api').value.trim() || 'https://dictaste.vercel.app';
       window.dictaste.openExternal(api.replace(/\/$/, '') + '/dashboard');
+    };
+    document.getElementById('unlock').onclick = () => {
+      const api = document.getElementById('api').value.trim() || 'https://dictaste.vercel.app';
+      window.dictaste.openExternal(api.replace(/\/$/, '') + '/developers/setup');
     };
     document.getElementById('help').onclick = () => {
       window.dictaste.openExternal('https://github.com/johnmatveyev-lab/dictaste/issues');
