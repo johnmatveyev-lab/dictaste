@@ -1,8 +1,8 @@
 # Install Dictaste on Windows
 
-## Preview zip (0.1.7)
+## Preview zip (0.1.8)
 
-1. Download [Dictaste-Setup-0.1.7.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.6/Dictaste-Setup-0.1.7.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.8.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.6/Dictaste-Setup-0.1.8.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — not code-signed yet; **More info → Run anyway**).
 3. Tray icon → **Settings…** → paste license from the dashboard.
 4. Hotkeys (remappable in Settings):
@@ -30,3 +30,8 @@ Same as Mac: star this repo → [developer setup](https://dictaste.vercel.app/de
 
 - Settings → **Launch Dictaste at Windows sign-in** for always-on hotkeys.
 - Paste your OpenAI key for Developer-plan premium highlight-to-speak (BYO).
+
+
+## License usage meter
+
+Settings → paste license → **Refresh plan** shows plan, polish words, and premium TTS chars (same `/api/v1/me` as Mac).

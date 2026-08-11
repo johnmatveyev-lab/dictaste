@@ -627,6 +627,47 @@ async function polishText(text) {
 }
 
 /**
+ * License + usage meter from GET /api/v1/me (same contract as Mac).
+ */
+async function fetchLicenseStatus() {
+  if (!cfg?.licenseKey) {
+    return { ok: false, error: "No license key saved" };
+  }
+  const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
+  try {
+    const { status, json } = await requestJson(`${base}/api/v1/me`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${cfg.licenseKey}` },
+    });
+    if (status === 401) {
+      return { ok: false, error: "Invalid or expired license", status };
+    }
+    if (status !== 200 || !json) {
+      return { ok: false, error: `HTTP ${status}`, status, raw: json };
+    }
+    return {
+      ok: true,
+      plan: json.plan,
+      planName: json.planName,
+      subscriptionStatus: json.subscriptionStatus,
+      wordsUsed: json.wordsUsed,
+      wordsLimit: json.wordsLimit,
+      charsUsed: json.charsUsed,
+      charsLimit: json.charsLimit,
+      ttsCharsUsed: json.ttsCharsUsed,
+      ttsCharsLimit: json.ttsCharsLimit,
+      usagePeriod: json.usagePeriod,
+      githubLogin: json.githubLogin,
+      githubStarred: json.githubStarred,
+      byoOnly: json.byoOnly,
+      unlimited: json.unlimited,
+    };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
  * W1 STT: OpenAI Whisper API (BYO key) from webm/wav base64 payload.
  */
 function transcribeOpenAI(base64, mime = "audio/webm") {
@@ -981,6 +1022,7 @@ app.whenReady().then(() => {
     if (cfg.autoPaste !== false) pasteText(polished);
     return polished;
   });
+  ipcMain.handle("license-status", async () => fetchLicenseStatus());
   ipcMain.handle("read-selection", async () => {
     await toggleFlowRead();
     return { reading };

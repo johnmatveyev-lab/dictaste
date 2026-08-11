@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.7</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.8</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
@@ -39,6 +39,10 @@
 
   <label>License key (from dictaste.vercel.app/dashboard)</label>
   <input id="license" placeholder="Paste your license key" autocomplete="off" spellcheck="false" />
+
+  <div id="usage" class="hint" style="margin-top:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);">
+    Save a license key, then <strong style="color:var(--lime)">Refresh plan</strong> to see usage.
+  </div>
 
   <label>API base</label>
   <input id="api" placeholder="https://dictaste.vercel.app" />
@@ -90,6 +94,7 @@
     <button id="read" class="ghost">Read selection</button>
     <button id="stopRead" class="ghost">Stop reading</button>
     <button id="save" class="ghost">Save</button>
+    <button id="refreshPlan" class="ghost">Refresh plan</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
     <button id="unlock" class="ghost">Free developer unlock</button>
@@ -108,6 +113,55 @@
 
   <script>
     let listening = false;
+
+    function formatMeter(used, limit, unlimited) {
+      if (unlimited || limit == null) return `${used ?? 0} / ∞`;
+      return `${used ?? 0} / ${limit}`;
+    }
+
+    function renderUsage(st) {
+      const el = document.getElementById('usage');
+      if (!st || !st.ok) {
+        el.innerHTML = st?.error
+          ? `<span style="color:#ff8fab">${st.error}</span>`
+          : 'Save a license key, then <strong style="color:var(--lime)">Refresh plan</strong> to see usage.';
+        return;
+      }
+      const plan = st.planName || st.plan || 'unknown';
+      const lines = [
+        `<strong style="color:var(--lime)">${plan}</strong>` +
+          (st.subscriptionStatus ? ` · ${st.subscriptionStatus}` : '') +
+          (st.byoOnly ? ' · BYO only' : ''),
+      ];
+      if (st.githubLogin) {
+        lines.push(
+          `GitHub @${st.githubLogin}` +
+            (st.githubStarred === true
+              ? ' · starred ✓'
+              : st.githubStarred === false
+                ? ' · not starred'
+                : '')
+        );
+      }
+      lines.push(`Polish words: ${formatMeter(st.wordsUsed, st.wordsLimit, st.unlimited)}`);
+      if (st.ttsCharsLimit != null || st.ttsCharsUsed != null) {
+        lines.push(
+          `Premium TTS chars: ${formatMeter(st.ttsCharsUsed, st.ttsCharsLimit, st.ttsCharsLimit == null)}`
+        );
+      }
+      if (st.usagePeriod) lines.push(`Period: ${st.usagePeriod}`);
+      el.innerHTML = lines.join('<br/>');
+    }
+
+    async function refreshPlan() {
+      document.getElementById('status').textContent = 'Checking license…';
+      const st = await window.dictaste.licenseStatus();
+      renderUsage(st);
+      document.getElementById('status').textContent = st.ok
+        ? `Plan: ${st.planName || st.plan}`
+        : st.error || 'License check failed';
+      return st;
+    }
 
     async function boot() {
       const c = await window.dictaste.getConfig();
@@ -138,6 +192,7 @@
           document.getElementById('text').value = s.last;
         } else document.getElementById('status').textContent = 'Ready';
       });
+      if (c.licenseKey) refreshPlan().catch(() => {});
     }
 
     async function save() {
@@ -162,9 +217,14 @@
       document.getElementById('hotkeyRead').value =
         again.hotkeyReadDisplay || again.hotkeyRead || '';
       document.getElementById('status').textContent = 'Saved · hotkeys applied';
+      if (again.licenseKey) await refreshPlan();
     }
 
     document.getElementById('save').onclick = save;
+    document.getElementById('refreshPlan').onclick = async () => {
+      await save();
+      await refreshPlan();
+    };
     document.getElementById('toggle').onclick = async () => {
       await save();
       await window.dictaste.setListening(!listening);
