@@ -94,6 +94,7 @@ for (const s of [
   "Recent transcripts",
   "get-history",
   "clear-history",
+  "sttLang",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -135,6 +136,17 @@ if (/id="history"|Recent transcripts/i.test(settings)) {
 } else {
   fail("settings.html missing recent history UI");
 }
+if (/id="sttLang"/i.test(settings)) {
+  pass("settings.html has sttLang control");
+} else {
+  fail("settings.html missing sttLang control");
+}
+const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
+if (/sttLang|msg\.sttLang/i.test(hud)) {
+  pass("hud.html accepts sttLang");
+} else {
+  fail("hud.html missing sttLang wiring");
+}
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);
 } else {
@@ -147,7 +159,6 @@ else pass("no waitlist copy in main.js");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
-const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/FlowDictate|flowdictate/.test(hud)) fail("FlowDictate leak in hud.html");
 else pass("no FlowDictate in hud.html");
 

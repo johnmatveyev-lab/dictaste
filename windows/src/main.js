@@ -13,6 +13,7 @@
  * - Settings: license, STT/TTS, SAPI rate/voice, premium voice, quiet toasts
  * - Silent startup update check (notifies only when behind)
  * - Tray: copy last transcript + recent history
+ * - Web Speech language (BCP-47) selectable in Settings
  */
 const {
   app,
@@ -51,6 +52,8 @@ function defaultConfig() {
     autoPaste: true,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
+    /** BCP-47 language for Web Speech (and Whisper language when set) */
+    sttLang: "en-US",
     openAIKey: "",
     /** Absolute path to whisper.cpp `whisper-cli` or `main` binary (optional offline) */
     whisperBin: "",
@@ -910,9 +913,17 @@ function transcribeOpenAI(base64, mime = "audio/webm") {
     const buf = Buffer.from(base64, "base64");
     const boundary = "----DictasteBoundary" + Date.now();
     const ext = mime.includes("wav") ? "wav" : mime.includes("mp4") ? "mp4" : "webm";
+    // Whisper wants ISO-639-1; map BCP-47 en-US → en
+    const langRaw = String(cfg.sttLang || "").trim();
+    const langIso = langRaw.includes("-") ? langRaw.split("-")[0] : langRaw;
+    const langPart = langIso
+      ? `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="language"\r\n\r\n${langIso}\r\n`
+      : "";
     const preamble =
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n` +
+      langPart +
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="file"; filename="dictation.${ext}"\r\n` +
       `Content-Type: ${mime}\r\n\r\n`;
@@ -1083,6 +1094,7 @@ async function startListening() {
     hudWin.webContents.send("dictate-control", {
       action: "start",
       sttMode: cfg.sttMode || "webspeech",
+      sttLang: cfg.sttLang || "en-US",
     });
   }
   // Also open settings window if never opened so user can save license first session

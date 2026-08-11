@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.13</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.14</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    SAPI voice + rate + premium neural pickers. Tray → recent transcripts (last 10). Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Dictation language + SAPI voice/rate + recent transcripts (last 10). Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -69,6 +69,30 @@
     <option value="webspeech">Web Speech (default · free · online)</option>
     <option value="openai">OpenAI Whisper API (BYO key · higher quality)</option>
     <option value="whisper-cli">Offline whisper.cpp CLI (path below)</option>
+  </select>
+
+  <label>Dictation language (Web Speech · Whisper)</label>
+  <select id="sttLang" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="en-US">English (US)</option>
+    <option value="en-GB">English (UK)</option>
+    <option value="en-AU">English (Australia)</option>
+    <option value="es-ES">Spanish (Spain)</option>
+    <option value="es-MX">Spanish (Mexico)</option>
+    <option value="fr-FR">French</option>
+    <option value="de-DE">German</option>
+    <option value="pt-BR">Portuguese (Brazil)</option>
+    <option value="pt-PT">Portuguese (Portugal)</option>
+    <option value="it-IT">Italian</option>
+    <option value="nl-NL">Dutch</option>
+    <option value="pl-PL">Polish</option>
+    <option value="uk-UA">Ukrainian</option>
+    <option value="ru-RU">Russian</option>
+    <option value="ja-JP">Japanese</option>
+    <option value="ko-KR">Korean</option>
+    <option value="zh-CN">Chinese (Simplified)</option>
+    <option value="zh-TW">Chinese (Traditional)</option>
+    <option value="hi-IN">Hindi</option>
+    <option value="ar-SA">Arabic</option>
   </select>
 
   <label>Highlight-to-speak engine</label>
@@ -138,7 +162,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    SAPI voice/rate + premium voice apply on next read. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
+    Dictation language applies to Web Speech and Whisper. SAPI voice/rate + premium voice apply on next read. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -210,6 +234,7 @@
       document.getElementById('hotkeyRead').value =
         c.hotkeyReadDisplay || c.hotkeyRead || 'Ctrl+Shift+R';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
+      document.getElementById('sttLang').value = c.sttLang || 'en-US';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
       const rate = Math.max(-10, Math.min(10, Number(c.ttsRate) || 0));
       document.getElementById('ttsRate').value = String(rate);
@@ -277,6 +302,7 @@
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
+        sttLang: document.getElementById('sttLang').value || 'en-US',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         ttsRate: Math.max(-10, Math.min(10, Number(document.getElementById('ttsRate').value) || 0)),
         ttsSapiVoice: document.getElementById('ttsSapiVoice').value || '',

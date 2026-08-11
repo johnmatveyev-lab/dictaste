@@ -104,8 +104,9 @@
       mediaRecorder = null;
     }
 
-    async function start(mode) {
+    async function start(mode, lang) {
       sttMode = mode || 'webspeech';
+      const sttLang = (lang || 'en-US').trim() || 'en-US';
       finals = [];
       interim = '';
       document.getElementById('partial').textContent = '';
@@ -141,7 +142,7 @@
         rec = new SR();
         rec.continuous = true;
         rec.interimResults = true;
-        rec.lang = 'en-US';
+        rec.lang = sttLang;
         rec.onresult = (e) => {
           interim = '';
           for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -155,7 +156,7 @@
           document.getElementById('sub').textContent = 'Mic: ' + (e.error || 'error');
         };
         rec.start();
-        setUI(true, 'Web Speech…');
+        setUI(true, 'Web Speech · ' + sttLang);
       } catch (err) {
         setUI(false, String(err.message || err));
         window.dictaste.sessionComplete({ text: '' });
@@ -190,7 +191,7 @@
     }
 
     window.dictaste.onDictateControl((msg) => {
-      if (msg.action === 'start') start(msg.sttMode);
+      if (msg.action === 'start') start(msg.sttMode, msg.sttLang);
       if (msg.action === 'stop') stop();
     });
     window.dictaste.onStatus((s) => {

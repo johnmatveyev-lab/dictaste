@@ -1,8 +1,8 @@
 # Install Dictaste on Windows
 
-## Preview zip (0.1.13)
+## Preview zip (0.1.14)
 
-1. Download [Dictaste-Setup-0.1.13.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.13.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.14.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.14.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — not code-signed yet; **More info → Run anyway**).
 3. Tray icon → **Settings…** → paste license from the dashboard.
 4. Hotkeys (remappable in Settings):
@@ -27,6 +27,7 @@ Same as Mac: star this repo → [developer setup](https://dictaste.vercel.app/de
 
 ## Tips
 
+- Settings → **Dictation language** for Web Speech and Whisper (20 locales).
 - Settings → **Recent transcripts** (last 10) — click to copy; also in tray submenu.
 - Settings → **SAPI system voice** + speech rate for free offline highlight-to-speak.
 - Settings → **Premium neural voice** when on Pro or BYO OpenAI key.
