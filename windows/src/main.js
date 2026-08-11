@@ -12,7 +12,7 @@
  * - Optional launch at login
  * - Settings: license, STT/TTS, SAPI rate/voice, premium voice, quiet toasts
  * - Silent startup update check (notifies only when behind)
- * - Tray: copy last transcript
+ * - Tray: copy last transcript + recent history
  */
 const {
   app,
@@ -79,6 +79,8 @@ function defaultConfig() {
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
+    /** Last polished dictations (newest first, max 10) */
+    history: [],
   };
 }
 
@@ -586,6 +588,9 @@ async function toggleFlowRead() {
     return;
   }
   const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
+  // Keep selection available for "Copy last transcript" without treating as dictation history
+  lastTranscript = text;
+  rebuildTrayMenu();
   notify(`Reading · ${preview}`);
   try {
     await speakText(text);
@@ -751,8 +756,34 @@ function listSapiVoices() {
   });
 }
 
-function copyLastTranscript() {
-  const t = String(lastTranscript || "").trim();
+function normalizeHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function pushHistory(text) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  lastTranscript = t;
+  const prev = normalizeHistory(cfg?.history);
+  const next = [t, ...prev.filter((x) => x !== t)].slice(0, 10);
+  cfg = { ...cfg, history: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+}
+
+function copyLastTranscript(index = 0) {
+  const hist = normalizeHistory(cfg?.history);
+  const t = String(
+    hist[index] || (index === 0 ? lastTranscript : "") || ""
+  ).trim();
   if (!t) {
     notify("No transcript yet — dictate first", { force: true });
     return false;
@@ -1128,8 +1159,22 @@ function rebuildTrayMenu() {
     },
     {
       label: "Copy last transcript",
-      enabled: !!String(lastTranscript || "").trim(),
-      click: () => copyLastTranscript(),
+      enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
+      click: () => copyLastTranscript(0),
+    },
+    {
+      label: "Recent transcripts",
+      enabled: normalizeHistory(cfg?.history).length > 0,
+      submenu: (() => {
+        const hist = normalizeHistory(cfg?.history);
+        if (!hist.length) {
+          return [{ label: "(empty)", enabled: false }];
+        }
+        return hist.map((t, i) => ({
+          label: (t.length > 48 ? t.slice(0, 45) + "…" : t).replace(/\s+/g, " "),
+          click: () => copyLastTranscript(i),
+        }));
+      })(),
     },
     { label: "Settings…", click: () => openSettings() },
     {
@@ -1228,15 +1273,24 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
     const polished = await polishText(String(text || ""));
-    lastTranscript = polished;
-    rebuildTrayMenu();
+    pushHistory(polished);
     if (cfg.autoPaste !== false) pasteText(polished);
     return polished;
   });
   ipcMain.handle("license-status", async () => fetchLicenseStatus());
   ipcMain.handle("check-for-updates", async () => checkForUpdates());
   ipcMain.handle("list-sapi-voices", async () => listSapiVoices());
-  ipcMain.handle("copy-last-transcript", () => copyLastTranscript());
+  ipcMain.handle("copy-last-transcript", (_e, index) =>
+    copyLastTranscript(Number(index) || 0)
+  );
+  ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
+  ipcMain.handle("clear-history", () => {
+    cfg = { ...cfg, history: [] };
+    lastTranscript = "";
+    saveConfig(cfg);
+    rebuildTrayMenu();
+    return true;
+  });
   ipcMain.handle("read-selection", async () => {
     await toggleFlowRead();
     return { reading };
@@ -1296,8 +1350,7 @@ app.whenReady().then(() => {
     }
     broadcastStatus({ phase: "polishing", last: raw });
     const polished = await polishText(raw);
-    lastTranscript = polished;
-    rebuildTrayMenu();
+    pushHistory(polished);
     if (cfg.autoPaste !== false) pasteText(polished);
     broadcastStatus({ phase: "idle", last: polished });
     notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);

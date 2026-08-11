@@ -90,6 +90,10 @@ for (const s of [
   "listSapiVoices",
   "copyLastTranscript",
   "Copy last transcript",
+  "pushHistory",
+  "Recent transcripts",
+  "get-history",
+  "clear-history",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -125,6 +129,11 @@ if (/Copy last transcript/i.test(settings)) {
   pass("settings.html has copy last transcript");
 } else {
   fail("settings.html missing copy last transcript");
+}
+if (/id="history"|Recent transcripts/i.test(settings)) {
+  pass("settings.html has recent history UI");
+} else {
+  fail("settings.html missing recent history UI");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);

@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.12</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.13</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    SAPI voice + rate + premium neural pickers below. Tray → <em>Copy last transcript</em>. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    SAPI voice + rate + premium neural pickers. Tray → recent transcripts (last 10). Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -111,6 +111,15 @@
   <label>Manual transcript (optional)</label>
   <textarea id="text" placeholder="Type or paste text to polish without mic…"></textarea>
 
+  <label>Recent transcripts (last 10 · click to copy)</label>
+  <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
+    Dictate once to build history.
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button type="button" id="refreshHistory" class="ghost">Refresh history</button>
+    <button type="button" id="clearHistory" class="ghost">Clear history</button>
+  </div>
+
   <div class="row">
     <button id="toggle">Start dictation</button>
     <button id="read" class="ghost">Read selection</button>
@@ -129,7 +138,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    SAPI voice/rate + premium voice apply on next read. Tray copies last transcript. Startup silently checks for newer Setup builds.
+    SAPI voice/rate + premium voice apply on next read. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -210,6 +219,7 @@
       document.getElementById('whisperBin').value = c.whisperBin || '';
       document.getElementById('whisperModel').value = c.whisperModel || '';
       await fillSapiVoices(c.ttsSapiVoice || '');
+      await renderHistory();
       window.dictaste.onStatus((s) => {
         listening = !!s.listening;
         document.getElementById('toggle').textContent = listening ? 'Stop dictation' : 'Start dictation';
@@ -221,9 +231,39 @@
         else if (s.last) {
           document.getElementById('status').textContent = 'Done';
           document.getElementById('text').value = s.last;
+          renderHistory().catch(() => {});
         } else document.getElementById('status').textContent = 'Ready';
       });
       if (c.licenseKey) refreshPlan().catch(() => {});
+    }
+
+    async function renderHistory() {
+      const el = document.getElementById('history');
+      let hist = [];
+      try {
+        hist = (await window.dictaste.getHistory()) || [];
+      } catch {
+        hist = [];
+      }
+      if (!hist.length) {
+        el.textContent = 'Dictate once to build history.';
+        return;
+      }
+      el.innerHTML = '';
+      hist.forEach((t, i) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'ghost';
+        row.style.cssText =
+          'display:block;width:100%;text-align:left;margin:0 0 6px;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;';
+        row.textContent = (i + 1) + '. ' + (t.length > 140 ? t.slice(0, 137) + '…' : t);
+        row.onclick = async () => {
+          await window.dictaste.copyLastTranscript(i);
+          document.getElementById('status').textContent = 'Copied transcript #' + (i + 1);
+          document.getElementById('text').value = t;
+        };
+        el.appendChild(row);
+      });
     }
 
     async function save() {
@@ -296,8 +336,17 @@
           : 'No SAPI voices found (Windows only)';
     };
     document.getElementById('copyLast').onclick = async () => {
-      const ok = await window.dictaste.copyLastTranscript();
+      const ok = await window.dictaste.copyLastTranscript(0);
       document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
+    };
+    document.getElementById('refreshHistory').onclick = async () => {
+      await renderHistory();
+      document.getElementById('status').textContent = 'History refreshed';
+    };
+    document.getElementById('clearHistory').onclick = async () => {
+      await window.dictaste.clearHistory();
+      await renderHistory();
+      document.getElementById('status').textContent = 'History cleared';
     };
     document.getElementById('save').onclick = save;
     document.getElementById('refreshPlan').onclick = async () => {
