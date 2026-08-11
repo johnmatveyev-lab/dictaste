@@ -1,11 +1,11 @@
 # Install Dictaste on Windows
 
-## Preview zip (0.1.6)
+## Preview zip (0.1.7)
 
-1. Download [Dictaste-Setup-0.1.6.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.6/Dictaste-Setup-0.1.6.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.7.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.6/Dictaste-Setup-0.1.7.zip) or use [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — not code-signed yet; **More info → Run anyway**).
 3. Tray icon → **Settings…** → paste license from the dashboard.
-4. Hotkeys:
+4. Hotkeys (remappable in Settings):
    - **Ctrl+Shift+Space** — start/stop dictation (polish + paste)
    - **Ctrl+Shift+R** — highlight-to-speak (selection or clipboard). Free system SAPI voices; Pro managed premium TTS when licensed. Same hotkey stops.
 5. Tray menu: **Read selection**, **Unlock free Developer plan**, **Pricing**, **Check for updates…**, **Help / Issues**, **Star on GitHub**, **Download page**.

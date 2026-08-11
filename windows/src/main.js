@@ -1,10 +1,10 @@
 /**
  * Dictaste Windows MVP
  * - Tray app + lime brand icon
- * - Global shortcut Ctrl+Shift+Space starts/stops mic capture
+ * - Remappable global hotkeys (defaults Ctrl+Shift+Space / Ctrl+Shift+R)
  * - Web Speech STT in always-on-top HUD
  * - Auto polish via /api/v1/polish + paste (Ctrl+V) on stop
- * - Highlight-to-speak: Ctrl+Shift+R → selection/clipboard
+ * - Highlight-to-speak: selection/clipboard
  *   · free system SAPI voices
  *   · managed premium TTS via /api/v1/tts (Pro)
  *   · BYO OpenAI TTS when openAIKey set (Developer plan parity)
@@ -67,7 +67,85 @@ function defaultConfig() {
     ttsVoice: "alloy",
     /** Start Dictaste when Windows signs in */
     launchAtLogin: false,
+    /** Electron accelerators (also accept Ctrl+… display form) */
+    hotkeyDictate: "CommandOrControl+Shift+Space",
+    hotkeyRead: "CommandOrControl+Shift+R",
   };
+}
+
+const DEFAULT_HOTKEY_DICTATE = "CommandOrControl+Shift+Space";
+const DEFAULT_HOTKEY_READ = "CommandOrControl+Shift+R";
+
+/** Normalize user/settings hotkey strings to Electron accelerators. */
+function toAccelerator(raw, fallback) {
+  let s = String(raw || "")
+    .trim()
+    .replace(/\s+/g, "");
+  if (!s) return fallback;
+  // Order matters: expand long forms first
+  s = s
+    .replace(/CommandOrControl/gi, "§COC§")
+    .replace(/CmdOrCtrl/gi, "§COC§")
+    .replace(/Control/gi, "§COC§")
+    .replace(/Ctrl/gi, "§COC§")
+    .replace(/Cmd/gi, "§COC§")
+    .replace(/Command/gi, "§COC§")
+    .replace(/§COC§/g, "CommandOrControl")
+    .replace(/Option/gi, "Alt")
+    .replace(/Win/gi, "Super")
+    .replace(/Windows/gi, "Super");
+  // Title-case common keys
+  s = s
+    .split("+")
+    .map((part) => {
+      if (/^CommandOrControl$/i.test(part)) return "CommandOrControl";
+      if (/^(Alt|Shift|Super|Meta)$/i.test(part))
+        return part[0].toUpperCase() + part.slice(1).toLowerCase();
+      if (/^Space$/i.test(part)) return "Space";
+      if (/^[a-z]$/i.test(part)) return part.toUpperCase();
+      if (/^F\d{1,2}$/i.test(part)) return part.toUpperCase();
+      return part;
+    })
+    .join("+");
+  return s || fallback;
+}
+
+function toDisplayHotkey(accel) {
+  return String(accel || "")
+    .replace(/CommandOrControl/gi, "Ctrl")
+    .replace(/Super/gi, "Win");
+}
+
+function hotkeyDictateAccel() {
+  return toAccelerator(cfg?.hotkeyDictate, DEFAULT_HOTKEY_DICTATE);
+}
+
+function hotkeyReadAccel() {
+  return toAccelerator(cfg?.hotkeyRead, DEFAULT_HOTKEY_READ);
+}
+
+/** Register (or re-register) global hotkeys from config. */
+function registerHotkeys() {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    /* ignore */
+  }
+  const dict = hotkeyDictateAccel();
+  const read = hotkeyReadAccel();
+  const okD = globalShortcut.register(dict, () => toggleListen());
+  const okR = globalShortcut.register(read, () => {
+    toggleFlowRead().catch(() => {});
+  });
+  if (!okD) {
+    notify(`Could not bind dictate hotkey (${toDisplayHotkey(dict)}) — try another in Settings`);
+  }
+  if (!okR) {
+    notify(`Could not bind read hotkey (${toDisplayHotkey(read)}) — try another in Settings`);
+  }
+  rebuildTrayMenu();
+  setTrayLabel();
+  return { dictate: dict, read, okD, okR };
 }
 
 function saveConfig(cfg) {
@@ -663,14 +741,14 @@ function notify(body) {
 
 function setTrayLabel() {
   if (!tray) return;
+  const d = toDisplayHotkey(hotkeyDictateAccel());
+  const r = toDisplayHotkey(hotkeyReadAccel());
   if (listening) {
-    tray.setToolTip("Dictaste — listening (Ctrl+Shift+Space to stop)");
+    tray.setToolTip(`Dictaste — listening (${d} to stop)`);
   } else if (reading) {
-    tray.setToolTip("Dictaste — reading (Ctrl+Shift+R to stop)");
+    tray.setToolTip(`Dictaste — reading (${r} to stop)`);
   } else {
-    tray.setToolTip(
-      "Dictaste — dictate Ctrl+Shift+Space · read selection Ctrl+Shift+R"
-    );
+    tray.setToolTip(`Dictaste — dictate ${d} · read ${r}`);
   }
 }
 
@@ -780,19 +858,20 @@ function appVersion() {
   }
 }
 
-function createTray() {
-  const img = makeTrayIcon();
-  tray = new Tray(img);
+function rebuildTrayMenu() {
+  if (!tray) return;
   const base = () => (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
+  const d = toDisplayHotkey(hotkeyDictateAccel());
+  const r = toDisplayHotkey(hotkeyReadAccel());
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
     { type: "separator" },
     {
-      label: "Toggle dictation (Ctrl+Shift+Space)",
+      label: `Toggle dictation (${d})`,
       click: () => toggleListen(),
     },
     {
-      label: "Read selection (Ctrl+Shift+R)",
+      label: `Read selection (${r})`,
       click: () => {
         toggleFlowRead().catch(() => {});
       },
@@ -837,28 +916,65 @@ function createTray() {
     { label: "Quit Dictaste", click: () => app.quit() },
   ]);
   tray.setContextMenu(menu);
+}
+
+function createTray() {
+  if (tray) {
+    try {
+      tray.destroy();
+    } catch {
+      /* ignore */
+    }
+    tray = null;
+  }
+  const img = makeTrayIcon();
+  tray = new Tray(img);
+  rebuildTrayMenu();
   setTrayLabel();
   tray.on("click", () => openSettings());
 }
 
 app.whenReady().then(() => {
   cfg = loadConfig();
+  // Normalize hotkeys into accelerator form on load
+  cfg.hotkeyDictate = hotkeyDictateAccel();
+  cfg.hotkeyRead = hotkeyReadAccel();
   applyLaunchAtLogin(cfg.launchAtLogin);
   createTray();
   ensureHud();
-  globalShortcut.register("CommandOrControl+Shift+Space", () => toggleListen());
-  globalShortcut.register("CommandOrControl+Shift+R", () => {
-    toggleFlowRead().catch(() => {});
-  });
+  registerHotkeys();
 
-  ipcMain.handle("get-config", () => cfg);
+  ipcMain.handle("get-config", () => ({
+    ...cfg,
+    hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
+    hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
+  }));
   ipcMain.handle("save-config", (_e, next) => {
+    const prev = { ...cfg };
     cfg = { ...cfg, ...next };
+    if (next?.hotkeyDictate != null) {
+      cfg.hotkeyDictate = toAccelerator(next.hotkeyDictate, DEFAULT_HOTKEY_DICTATE);
+    }
+    if (next?.hotkeyRead != null) {
+      cfg.hotkeyRead = toAccelerator(next.hotkeyRead, DEFAULT_HOTKEY_READ);
+    }
     saveConfig(cfg);
     if (Object.prototype.hasOwnProperty.call(next || {}, "launchAtLogin")) {
       applyLaunchAtLogin(cfg.launchAtLogin);
     }
-    return cfg;
+    const hotkeysChanged =
+      prev.hotkeyDictate !== cfg.hotkeyDictate || prev.hotkeyRead !== cfg.hotkeyRead;
+    if (hotkeysChanged || next?.hotkeyDictate != null || next?.hotkeyRead != null) {
+      registerHotkeys();
+    } else {
+      rebuildTrayMenu();
+      setTrayLabel();
+    }
+    return {
+      ...cfg,
+      hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
+      hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
+    };
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
     const polished = await polishText(String(text || ""));
@@ -937,7 +1053,7 @@ app.whenReady().then(() => {
   if (!cfg.seenWelcome) {
     setTimeout(() => {
       notify(
-        `Welcome · Dictaste ${appVersion()}. Dictate Ctrl+Shift+Space · Read selection Ctrl+Shift+R. Paste license in Settings.`
+        `Welcome · Dictaste ${appVersion()}. Dictate ${toDisplayHotkey(hotkeyDictateAccel())} · Read ${toDisplayHotkey(hotkeyReadAccel())}. Remap hotkeys in Settings.`
       );
       cfg.seenWelcome = true;
       saveConfig(cfg);

@@ -28,12 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.6</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.7</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    <span class="kbd">Ctrl+Shift+Space</span> dictate anywhere → polish → paste.<br />
-    <span class="kbd">Ctrl+Shift+R</span> highlight-to-speak — select text or clipboard; same hotkey stops.
-    Voices: free SAPI · Pro managed neural · Developer BYO OpenAI (paste key below).
+    Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
+    Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
     Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
@@ -43,6 +42,16 @@
 
   <label>API base</label>
   <input id="api" placeholder="https://dictaste.vercel.app" />
+
+  <label>Dictate hotkey</label>
+  <input id="hotkeyDictate" placeholder="Ctrl+Shift+Space" autocomplete="off" spellcheck="false" />
+
+  <label>Highlight-to-speak hotkey</label>
+  <input id="hotkeyRead" placeholder="Ctrl+Shift+R" autocomplete="off" spellcheck="false" />
+  <p class="hint" style="margin-top:6px">
+    Examples: <span class="kbd">Ctrl+Shift+Space</span>, <span class="kbd">Ctrl+Alt+D</span>, <span class="kbd">F8</span>.
+    Save to apply. Conflicts with other apps may fail to bind.
+  </p>
 
   <div class="checks">
     <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
@@ -91,7 +100,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Launch-at-login keeps the tray hotkeys ready after reboot.
+    Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     · docs in the monorepo <code>docs/INSTALL_WINDOWS.md</code>.
@@ -107,6 +116,10 @@
       document.getElementById('polish').checked = c.polish !== false;
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
+      document.getElementById('hotkeyDictate').value =
+        c.hotkeyDictateDisplay || c.hotkeyDictate || 'Ctrl+Shift+Space';
+      document.getElementById('hotkeyRead').value =
+        c.hotkeyReadDisplay || c.hotkeyRead || 'Ctrl+Shift+R';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
       document.getElementById('openai').value = c.openAIKey || '';
@@ -134,13 +147,21 @@
         polish: document.getElementById('polish').checked,
         autoPaste: document.getElementById('autoPaste').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
+        hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
+        hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         openAIKey: document.getElementById('openai').value.trim(),
         whisperBin: document.getElementById('whisperBin').value.trim(),
         whisperModel: document.getElementById('whisperModel').value.trim(),
       });
-      document.getElementById('status').textContent = 'Saved';
+      // Reflect normalized display forms after save
+      const again = await window.dictaste.getConfig();
+      document.getElementById('hotkeyDictate').value =
+        again.hotkeyDictateDisplay || again.hotkeyDictate || '';
+      document.getElementById('hotkeyRead').value =
+        again.hotkeyReadDisplay || again.hotkeyRead || '';
+      document.getElementById('status').textContent = 'Saved · hotkeys applied';
     }
 
     document.getElementById('save').onclick = save;
