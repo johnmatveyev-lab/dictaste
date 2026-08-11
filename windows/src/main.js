@@ -4,6 +4,7 @@
  * - Global shortcut Ctrl+Shift+Space starts/stops mic capture
  * - Web Speech STT in always-on-top HUD
  * - Auto polish via /api/v1/polish + paste (Ctrl+V) on stop
+ * - Highlight-to-speak (Flow Read free): Ctrl+Shift+R → selection/clipboard + SAPI
  * - Settings for license key + API base
  */
 const {
@@ -22,7 +23,7 @@ const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const http = require("http");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
 const DEFAULT_API = "https://dictaste.vercel.app";
@@ -49,6 +50,8 @@ function defaultConfig() {
     whisperModel: "",
     /** First-run welcome notification shown once */
     seenWelcome: false,
+    /** Highlight-to-speak rate: -10..10 (SAPI) */
+    ttsRate: 0,
   };
 }
 
@@ -78,7 +81,170 @@ let tray = null;
 let settingsWin = null;
 let hudWin = null;
 let listening = false;
+/** System TTS (highlight-to-speak) in progress */
+let reading = false;
+/** Active SAPI PowerShell child */
+let speakProc = null;
 let cfg = null;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isWin() {
+  return process.platform === "win32";
+}
+
+/** Kill in-flight SAPI speak process. */
+function stopSpeaking() {
+  if (speakProc && !speakProc.killed) {
+    try {
+      speakProc.kill();
+    } catch {
+      /* ignore */
+    }
+  }
+  speakProc = null;
+  if (reading) {
+    reading = false;
+    setTrayLabel();
+    broadcastStatus({ phase: "idle", reading: false });
+  }
+}
+
+/**
+ * Speak text with Windows SAPI (free system voices).
+ * Uses a temp .ps1 + UTF-8 base64 payload so user text cannot break the script.
+ */
+function speakTextSapi(text) {
+  return new Promise((resolve, reject) => {
+    stopSpeaking();
+    const trimmed = String(text || "").trim();
+    if (!trimmed) {
+      reject(new Error("Nothing to read"));
+      return;
+    }
+    if (!isWin()) {
+      // Dev on macOS/Linux — toast only (packaging happens on any host).
+      notify(`Preview speak (${trimmed.length} chars) — SAPI runs on Windows`);
+      resolve();
+      return;
+    }
+    const rate = Math.max(-10, Math.min(10, Number(cfg?.ttsRate) || 0));
+    const b64 = Buffer.from(trimmed, "utf8").toString("base64");
+    const ps1 = path.join(app.getPath("temp"), `dictaste-speak-${Date.now()}.ps1`);
+    const script = [
+      "Add-Type -AssemblyName System.Speech",
+      `$s = New-Object System.Speech.Synthesis.SpeechSynthesizer`,
+      `$s.Rate = ${rate}`,
+      `$bytes = [Convert]::FromBase64String('${b64}')`,
+      `$t = [Text.Encoding]::UTF8.GetString($bytes)`,
+      `$s.Speak($t)`,
+      "",
+    ].join("\r\n");
+    fs.writeFileSync(ps1, script, "utf8");
+    reading = true;
+    setTrayLabel();
+    broadcastStatus({ phase: "reading", reading: true });
+    speakProc = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps1],
+      { windowsHide: true }
+    );
+    speakProc.on("error", (e) => {
+      try {
+        fs.unlinkSync(ps1);
+      } catch {
+        /* ignore */
+      }
+      speakProc = null;
+      reading = false;
+      setTrayLabel();
+      broadcastStatus({ phase: "idle", reading: false, error: String(e.message || e) });
+      reject(e);
+    });
+    speakProc.on("close", () => {
+      try {
+        fs.unlinkSync(ps1);
+      } catch {
+        /* ignore */
+      }
+      speakProc = null;
+      reading = false;
+      setTrayLabel();
+      broadcastStatus({ phase: "idle", reading: false });
+      resolve();
+    });
+  });
+}
+
+/**
+ * Capture highlighted text: Ctrl+C into focused app, then read clipboard.
+ * Restores prior clipboard. Falls back to existing clipboard if no selection.
+ */
+async function captureSelectionText() {
+  const prev = clipboard.readText();
+  const marker = `__dictaste_sel_${Date.now()}__`;
+  clipboard.writeText(marker);
+
+  if (isWin()) {
+    await new Promise((resolve, reject) => {
+      exec(
+        `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 60; [System.Windows.Forms.SendKeys]::SendWait('^c')"`,
+        { windowsHide: true, timeout: 5000 },
+        (err) => (err ? reject(err) : resolve())
+      );
+    }).catch(() => {});
+    await sleep(180);
+  } else {
+    await sleep(50);
+  }
+
+  const text = clipboard.readText();
+  // Restore previous clipboard (selection path or marker)
+  try {
+    clipboard.writeText(prev || "");
+  } catch {
+    /* ignore */
+  }
+
+  if (text && text !== marker && text.trim()) return text.trim();
+  // No selection change — use prior clipboard if it had real content
+  if (prev && prev.trim() && prev !== marker) return prev.trim();
+  return "";
+}
+
+/** Toggle highlight-to-speak (Flow Read free path). */
+async function toggleFlowRead() {
+  if (reading) {
+    stopSpeaking();
+    notify("Stopped reading");
+    return;
+  }
+  // Don't fight mic dictation
+  if (listening) {
+    await stopListening();
+    await sleep(200);
+  }
+  let text = "";
+  try {
+    text = await captureSelectionText();
+  } catch (e) {
+    notify(`Selection failed: ${e.message || e}`);
+    return;
+  }
+  if (!text) {
+    notify("Highlight text (or copy) then press Ctrl+Shift+R");
+    return;
+  }
+  const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
+  notify(`Reading · ${preview}`);
+  try {
+    await speakTextSapi(text);
+  } catch (e) {
+    notify(`Read failed: ${e.message || e}`);
+  }
+}
 
 function requestJson(url, { method = "GET", headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
@@ -245,11 +411,15 @@ function notify(body) {
 
 function setTrayLabel() {
   if (!tray) return;
-  tray.setToolTip(
-    listening
-      ? "Dictaste — listening (Ctrl+Shift+Space to stop)"
-      : "Dictaste — ready (Ctrl+Shift+Space)"
-  );
+  if (listening) {
+    tray.setToolTip("Dictaste — listening (Ctrl+Shift+Space to stop)");
+  } else if (reading) {
+    tray.setToolTip("Dictaste — reading (Ctrl+Shift+R to stop)");
+  } else {
+    tray.setToolTip(
+      "Dictaste — dictate Ctrl+Shift+Space · read selection Ctrl+Shift+R"
+    );
+  }
 }
 
 function broadcastStatus(extra = {}) {
@@ -369,6 +539,16 @@ function createTray() {
       label: "Toggle dictation (Ctrl+Shift+Space)",
       click: () => toggleListen(),
     },
+    {
+      label: "Read selection (Ctrl+Shift+R)",
+      click: () => {
+        toggleFlowRead().catch(() => {});
+      },
+    },
+    {
+      label: "Stop reading",
+      click: () => stopSpeaking(),
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -414,6 +594,9 @@ app.whenReady().then(() => {
   createTray();
   ensureHud();
   globalShortcut.register("CommandOrControl+Shift+Space", () => toggleListen());
+  globalShortcut.register("CommandOrControl+Shift+R", () => {
+    toggleFlowRead().catch(() => {});
+  });
 
   ipcMain.handle("get-config", () => cfg);
   ipcMain.handle("save-config", (_e, next) => {
@@ -425,6 +608,14 @@ app.whenReady().then(() => {
     const polished = await polishText(String(text || ""));
     if (cfg.autoPaste !== false) pasteText(polished);
     return polished;
+  });
+  ipcMain.handle("read-selection", async () => {
+    await toggleFlowRead();
+    return { reading };
+  });
+  ipcMain.handle("stop-reading", () => {
+    stopSpeaking();
+    return true;
   });
   ipcMain.handle("open-external", (_e, url) => shell.openExternal(url));
   ipcMain.handle("set-listening", (_e, on) => {
@@ -490,7 +681,7 @@ app.whenReady().then(() => {
   if (!cfg.seenWelcome) {
     setTimeout(() => {
       notify(
-        `Welcome · Dictaste ${appVersion()}. Hotkey Ctrl+Shift+Space. Paste your license in Settings.`
+        `Welcome · Dictaste ${appVersion()}. Dictate Ctrl+Shift+Space · Read selection Ctrl+Shift+R. Paste license in Settings.`
       );
       cfg.seenWelcome = true;
       saveConfig(cfg);
@@ -499,6 +690,7 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  stopSpeaking();
   globalShortcut.unregisterAll();
 });
 

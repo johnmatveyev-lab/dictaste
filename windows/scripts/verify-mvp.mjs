@@ -49,6 +49,11 @@ for (const s of [
   "dictaste.vercel.app",
   "Ctrl+Shift+Space",
   "CommandOrControl+Shift+Space",
+  "CommandOrControl+Shift+R",
+  "toggleFlowRead",
+  "speakTextSapi",
+  "captureSelectionText",
+  "Read selection",
   "transcribeOpenAI",
   "transcribeWhisperCli",
   "session-complete",
@@ -63,6 +68,18 @@ for (const s of [
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
   else fail(`main.js missing ${s}`);
+}
+
+const settings = readFileSync(resolve(root, "src/settings.html"), "utf8");
+if (/Ctrl\+Shift\+R|Read selection|highlight-to-speak/i.test(settings)) {
+  pass("settings.html documents highlight-to-speak");
+} else {
+  fail("settings.html missing highlight-to-speak copy");
+}
+if (pkg.version === "0.1.4" || /^0\.1\.\d+$/.test(pkg.version)) {
+  pass(`package version ${pkg.version}`);
+} else {
+  fail(`unexpected version ${pkg.version}`);
 }
 
 if (/waitlist/i.test(main)) fail("waitlist copy still in main.js");
