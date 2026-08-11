@@ -4,7 +4,9 @@
  * - Global shortcut Ctrl+Shift+Space starts/stops mic capture
  * - Web Speech STT in always-on-top HUD
  * - Auto polish via /api/v1/polish + paste (Ctrl+V) on stop
- * - Highlight-to-speak (Flow Read free): Ctrl+Shift+R → selection/clipboard + SAPI
+ * - Highlight-to-speak: Ctrl+Shift+R → selection/clipboard
+ *   · free system SAPI voices
+ *   · optional managed premium TTS via /api/v1/tts (Pro) with SAPI fallback
  * - Settings for license key + API base
  */
 const {
@@ -52,6 +54,14 @@ function defaultConfig() {
     seenWelcome: false,
     /** Highlight-to-speak rate: -10..10 (SAPI) */
     ttsRate: 0,
+    /**
+     * system = free SAPI only
+     * managed = try /api/v1/tts (Pro), fall back to SAPI
+     * auto = managed when license present, else system
+     */
+    ttsEngine: "auto",
+    /** OpenAI-compatible voice name for managed TTS */
+    ttsVoice: "alloy",
   };
 }
 
@@ -179,6 +189,136 @@ function speakTextSapi(text) {
 }
 
 /**
+ * Play MP3 via WPF MediaPlayer (managed premium TTS path).
+ * @param {string} mp3Path absolute path to .mp3
+ */
+function playMp3File(mp3Path) {
+  return new Promise((resolve, reject) => {
+    stopSpeaking();
+    if (!isWin()) {
+      notify(`Preview premium TTS file · ${path.basename(mp3Path)}`);
+      resolve();
+      return;
+    }
+    const escaped = mp3Path.replace(/'/g, "''");
+    const ps1 = path.join(app.getPath("temp"), `dictaste-play-${Date.now()}.ps1`);
+    const script = [
+      "Add-Type -AssemblyName PresentationCore",
+      `$p = New-Object System.Windows.Media.MediaPlayer`,
+      `$p.Open([Uri]'${escaped}')`,
+      `$p.Play()`,
+      "$sw = [Diagnostics.Stopwatch]::StartNew()",
+      "while (-not $p.NaturalDuration.HasTimeSpan) {",
+      "  Start-Sleep -Milliseconds 40",
+      "  if ($sw.ElapsedMilliseconds -gt 8000) { break }",
+      "}",
+      "if ($p.NaturalDuration.HasTimeSpan) {",
+      "  $ms = [int]$p.NaturalDuration.TimeSpan.TotalMilliseconds + 250",
+      "  Start-Sleep -Milliseconds $ms",
+      "}",
+      "$p.Close()",
+      "",
+    ].join("\r\n");
+    fs.writeFileSync(ps1, script, "utf8");
+    reading = true;
+    setTrayLabel();
+    broadcastStatus({ phase: "reading", reading: true, engine: "managed" });
+    speakProc = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ps1],
+      { windowsHide: true }
+    );
+    const cleanup = () => {
+      try {
+        fs.unlinkSync(ps1);
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.unlinkSync(mp3Path);
+      } catch {
+        /* ignore */
+      }
+    };
+    speakProc.on("error", (e) => {
+      cleanup();
+      speakProc = null;
+      reading = false;
+      setTrayLabel();
+      broadcastStatus({ phase: "idle", reading: false, error: String(e.message || e) });
+      reject(e);
+    });
+    speakProc.on("close", (code) => {
+      cleanup();
+      speakProc = null;
+      reading = false;
+      setTrayLabel();
+      broadcastStatus({ phase: "idle", reading: false });
+      if (code && code !== 0) reject(new Error(`MediaPlayer exit ${code}`));
+      else resolve();
+    });
+  });
+}
+
+/**
+ * Managed premium TTS via Dictaste /api/v1/tts (Pro plans).
+ * Returns true if audio played; false if should fall back to SAPI.
+ */
+async function speakTextManaged(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new Error("Nothing to read");
+  if (!cfg.licenseKey) return false;
+
+  const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
+  broadcastStatus({ phase: "tts", reading: false });
+  const { status, json } = await requestJson(`${base}/api/v1/tts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.licenseKey}`,
+    },
+    body: {
+      text: trimmed.slice(0, 8000),
+      voice: cfg.ttsVoice || "alloy",
+    },
+  });
+
+  if (status === 402 || status === 403) {
+    // Free / Dev → use system voice; do not toast as error
+    return false;
+  }
+  if (status === 401) {
+    notify("License invalid for premium voices — using system voice");
+    return false;
+  }
+  if (status !== 200 || !json?.audioBase64) {
+    notify(`Premium TTS unavailable (${status}) — system voice`);
+    return false;
+  }
+
+  const mp3Path = path.join(app.getPath("temp"), `dictaste-tts-${Date.now()}.mp3`);
+  fs.writeFileSync(mp3Path, Buffer.from(json.audioBase64, "base64"));
+  await playMp3File(mp3Path);
+  return true;
+}
+
+/** Resolve preferred engine and speak (managed → SAPI fallback). */
+async function speakText(text) {
+  const engine = cfg.ttsEngine || "auto";
+  const tryManaged =
+    engine === "managed" || (engine === "auto" && Boolean(cfg.licenseKey));
+
+  if (tryManaged) {
+    try {
+      const ok = await speakTextManaged(text);
+      if (ok) return;
+    } catch (e) {
+      notify(`Premium TTS failed — system voice (${e.message || e})`);
+    }
+  }
+  await speakTextSapi(text);
+}
+
+/**
  * Capture highlighted text: Ctrl+C into focused app, then read clipboard.
  * Restores prior clipboard. Falls back to existing clipboard if no selection.
  */
@@ -240,7 +380,7 @@ async function toggleFlowRead() {
   const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
   notify(`Reading · ${preview}`);
   try {
-    await speakTextSapi(text);
+    await speakText(text);
   } catch (e) {
     notify(`Read failed: ${e.message || e}`);
   }

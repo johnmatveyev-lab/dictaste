@@ -34,6 +34,7 @@ for (const f of need) {
 }
 
 const main = readFileSync(resolve(root, "src/main.js"), "utf8");
+const settings = readFileSync(resolve(root, "src/settings.html"), "utf8");
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 
 if (pkg.productName === "Dictaste" || pkg.build?.productName === "Dictaste") pass("productName Dictaste");
@@ -52,8 +53,12 @@ for (const s of [
   "CommandOrControl+Shift+R",
   "toggleFlowRead",
   "speakTextSapi",
+  "speakTextManaged",
+  "playMp3File",
+  "/api/v1/tts",
   "captureSelectionText",
   "Read selection",
+  "ttsEngine",
   "transcribeOpenAI",
   "transcribeWhisperCli",
   "session-complete",
@@ -70,13 +75,17 @@ for (const s of [
   else fail(`main.js missing ${s}`);
 }
 
-const settings = readFileSync(resolve(root, "src/settings.html"), "utf8");
 if (/Ctrl\+Shift\+R|Read selection|highlight-to-speak/i.test(settings)) {
   pass("settings.html documents highlight-to-speak");
 } else {
   fail("settings.html missing highlight-to-speak copy");
 }
-if (pkg.version === "0.1.4" || /^0\.1\.\d+$/.test(pkg.version)) {
+if (/id="ttsEngine"|ttsEngine/i.test(settings)) {
+  pass("settings.html has ttsEngine control");
+} else {
+  fail("settings.html missing ttsEngine control");
+}
+if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);
 } else {
   fail(`unexpected version ${pkg.version}`);

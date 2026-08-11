@@ -28,11 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.4</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.5</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     <span class="kbd">Ctrl+Shift+Space</span> dictate anywhere → polish → paste.<br />
-    <span class="kbd">Ctrl+Shift+R</span> highlight-to-speak (system voice) — select text or use clipboard; same hotkey stops.
+    <span class="kbd">Ctrl+Shift+R</span> highlight-to-speak — select text or clipboard; same hotkey stops.
+    Free system voices always; Pro managed premium TTS when licensed.
     Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
@@ -48,11 +49,18 @@
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
   </div>
 
-  <label>Speech-to-text engine (W1)</label>
+  <label>Speech-to-text engine</label>
   <select id="sttMode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value="webspeech">Web Speech (default · free · online)</option>
     <option value="openai">OpenAI Whisper API (BYO key · higher quality)</option>
     <option value="whisper-cli">Offline whisper.cpp CLI (path below)</option>
+  </select>
+
+  <label>Highlight-to-speak voice</label>
+  <select id="ttsEngine" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="auto">Auto (premium if Pro license · else system)</option>
+    <option value="system">System SAPI only (free · offline)</option>
+    <option value="managed">Prefer managed premium (Pro · falls back to system)</option>
   </select>
 
   <label>OpenAI API key (for Whisper STT mode)</label>
@@ -81,7 +89,7 @@
   <p class="hint">
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
-    Highlight-to-speak uses free Windows system voices (SAPI). Premium managed TTS later.
+    Highlight-to-speak: free Windows SAPI always; Pro managed neural TTS via the same API as Mac when engine is Auto/Managed.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
     · docs in the monorepo <code>docs/INSTALL_WINDOWS.md</code>.
@@ -97,6 +105,7 @@
       document.getElementById('polish').checked = c.polish !== false;
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
+      document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
       document.getElementById('openai').value = c.openAIKey || '';
       document.getElementById('whisperBin').value = c.whisperBin || '';
       document.getElementById('whisperModel').value = c.whisperModel || '';
@@ -122,6 +131,7 @@
         polish: document.getElementById('polish').checked,
         autoPaste: document.getElementById('autoPaste').checked,
         sttMode: document.getElementById('sttMode').value || 'webspeech',
+        ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         openAIKey: document.getElementById('openai').value.trim(),
         whisperBin: document.getElementById('whisperBin').value.trim(),
         whisperModel: document.getElementById('whisperModel').value.trim(),
