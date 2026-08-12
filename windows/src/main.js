@@ -28,6 +28,7 @@
  * - Paste from history (tray) + deeper history (up to 50)
  * - Tray language switcher + case modes (sentence/lower/upper/title)
  * - Smart quotes / em dash + compact HUD
+ * - Word-count toast + import history
  */
 const {
   app,
@@ -99,6 +100,10 @@ function defaultConfig() {
      * Compact HUD: smaller pill, hide live partial transcript line.
      */
     hudCompact: false,
+    /**
+     * After paste/copy, toast includes word count (e.g. "Pasted · 42 words").
+     */
+    showWordCount: true,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -405,6 +410,7 @@ const SETTINGS_EXPORT_KEYS = [
   "doubleSpacePeriod",
   "smartQuotes",
   "hudCompact",
+  "showWordCount",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1002,9 +1008,9 @@ async function polishSelection() {
     const del = deliverText(polished);
     broadcastStatus({ phase: "idle", last: polished });
     if (del.mode === "paste") {
-      notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);
+      notifyDeliver(polished, "paste");
     }
-    return { ok: true, polished, deliver: del.mode };
+    return { ok: true, polished, deliver: del.mode, words: del.words };
   } catch (e) {
     broadcastStatus({ phase: "idle", error: String(e.message || e) });
     notify(`Polish selection failed: ${e.message || e}`, { force: true });
@@ -1463,12 +1469,9 @@ function pasteLastTranscript(index = 0) {
   lastTranscript = t;
   const del = deliverText(t);
   if (del.mode === "paste") {
-    notify(
-      t.length > 80 ? `Pasted · ${t.slice(0, 77)}…` : `Pasted · ${t}`,
-      { force: true }
-    );
+    notifyDeliver(t, "paste");
   }
-  return { ok: true, deliver: del.mode, text: t };
+  return { ok: true, deliver: del.mode, text: t, words: del.words };
 }
 
 /**
@@ -1743,21 +1746,60 @@ function pasteText(text) {
   );
 }
 
+function countWords(text) {
+  const t = String(text || "").trim();
+  if (!t) return 0;
+  // Unicode-aware-ish: split on whitespace / punctuation runs
+  return t.split(/[\s\u00A0]+/).filter(Boolean).length;
+}
+
+/**
+ * Toast after deliver: optional word count + short preview.
+ * @param {string} text
+ * @param {"paste"|"clipboard"} mode
+ */
+function notifyDeliver(text, mode) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  const words = countWords(t);
+  const wc =
+    cfg?.showWordCount !== false && words > 0
+      ? `${words} word${words === 1 ? "" : "s"}`
+      : "";
+  const preview =
+    t.length > 72 ? t.slice(0, 69).replace(/\s+\S*$/, "") + "…" : t;
+  if (mode === "clipboard") {
+    notify(wc ? `Copied · ${wc} — Ctrl+V` : "Copied — Ctrl+V to paste", {
+      force: true,
+    });
+    return;
+  }
+  // paste
+  if (wc && cfg?.showWordCount !== false) {
+    notify(preview ? `Pasted · ${wc} · ${preview}` : `Pasted · ${wc}`, {
+      force: true,
+    });
+  } else if (preview) {
+    notify(preview);
+  }
+}
+
 /**
  * Deliver final text: paste into focused app, or leave on clipboard only.
  * When autoPaste is off, keeps polished text on clipboard for manual Ctrl+V.
  */
 function deliverText(text) {
   const t = String(text || "");
-  if (!t) return { mode: "empty" };
+  if (!t) return { mode: "empty", words: 0 };
+  const words = countWords(t);
   if (cfg?.autoPaste !== false) {
     pasteText(t);
-    return { mode: "paste" };
+    return { mode: "paste", words };
   }
   const payload = applyPasteSuffix(t);
   clipboard.writeText(payload);
-  notify("Copied — Ctrl+V to paste", { force: true });
-  return { mode: "clipboard" };
+  notifyDeliver(t, "clipboard");
+  return { mode: "clipboard", words };
 }
 
 const TEST_VOICE_SAMPLES = {
@@ -1966,6 +2008,88 @@ function exportHistory() {
     return { ok: true, path: dest, count: hist.length };
   } catch (e) {
     notify(`Export failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Import transcripts from a .txt export (or plain lines).
+ * Merges into history (newest first), capped by historyMax.
+ */
+async function importHistory() {
+  try {
+    const win = settingsWin && !settingsWin.isDestroyed() ? settingsWin : null;
+    const res = await dialog.showOpenDialog(win || undefined, {
+      title: "Import Dictaste history",
+      filters: [
+        { name: "Text", extensions: ["txt", "md", "log"] },
+        { name: "All", extensions: ["*"] },
+      ],
+      properties: ["openFile"],
+    });
+    if (res.canceled || !res.filePaths?.[0]) {
+      return { ok: false, error: "canceled" };
+    }
+    const raw = fs.readFileSync(res.filePaths[0], "utf8");
+    const lines = raw.split(/\r?\n/);
+    const items = [];
+    let buf = [];
+    const flush = () => {
+      const joined = buf.join("\n").trim();
+      buf = [];
+      if (!joined || joined.startsWith("#")) return;
+      // Strip leading "1. " numbering from export format
+      const cleaned = joined.replace(/^\d+\.\s+/, "").trim();
+      if (cleaned) items.push(cleaned);
+    };
+    for (const line of lines) {
+      if (/^\d+\.\s+/.test(line)) {
+        flush();
+        buf.push(line);
+      } else if (line.trim() === "") {
+        flush();
+      } else if (!line.trim().startsWith("#")) {
+        buf.push(line);
+      }
+    }
+    flush();
+    // Also accept plain non-empty lines if no numbered blocks found
+    if (!items.length) {
+      for (const line of lines) {
+        const s = line.trim();
+        if (s && !s.startsWith("#")) items.push(s);
+      }
+    }
+    if (!items.length) {
+      notify("No transcripts found in file", { force: true });
+      return { ok: false, error: "empty" };
+    }
+    const max = historyMaxClamped();
+    const prev = normalizeHistory(cfg?.history);
+    // Imported file order: treat as oldest→newest if numbered export; reverse so newest first
+    const imported = items.slice().reverse();
+    const merged = [];
+    const seen = new Set();
+    for (const t of [...imported, ...prev]) {
+      const key = t.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(key);
+      if (merged.length >= max) break;
+    }
+    cfg = { ...cfg, history: merged };
+    if (merged[0]) lastTranscript = merged[0];
+    saveConfig(cfg);
+    rebuildTrayMenu();
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.webContents.send("status", { phase: "idle", historyImported: true });
+    }
+    notify(`Imported ${items.length} · history now ${merged.length}`, {
+      force: true,
+    });
+    return { ok: true, imported: items.length, total: merged.length };
+  } catch (e) {
+    notify(`Import history failed: ${e.message || e}`, { force: true });
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -2192,6 +2316,12 @@ function rebuildTrayMenu() {
             label: "Export history…",
             click: () => exportHistory(),
           },
+          {
+            label: "Import history…",
+            click: () => {
+              importHistory().catch(() => {});
+            },
+          },
         ];
       })(),
     },
@@ -2362,6 +2492,7 @@ app.whenReady().then(() => {
   ipcMain.handle("cancel-dictation", () => cancelDictation());
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
   ipcMain.handle("export-history", () => exportHistory());
+  ipcMain.handle("import-history", async () => importHistory());
   ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
   ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
@@ -2462,11 +2593,11 @@ app.whenReady().then(() => {
     const del = deliverText(polished);
     broadcastStatus({ phase: "idle", last: polished });
     if (del.mode === "paste") {
-      notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);
+      notifyDeliver(polished, "paste");
     } else if (del.mode === "clipboard") {
-      // deliverText already notified "Copied — Ctrl+V"
+      // deliverText already notified via notifyDeliver
     }
-    return { polished, deliver: del.mode };
+    return { polished, deliver: del.mode, words: del.words };
   }
 
   // First-run: open settings so license can be pasted + welcome toast

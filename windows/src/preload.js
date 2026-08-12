@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   setHudCompact: (on) => ipcRenderer.invoke("set-hud-compact", on),
   getHistory: () => ipcRenderer.invoke("get-history"),
   exportHistory: () => ipcRenderer.invoke("export-history"),
+  importHistory: () => ipcRenderer.invoke("import-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),
   getHotkeysPaused: () => ipcRenderer.invoke("get-hotkeys-paused"),
   setHotkeysPaused: (paused, opts) =>

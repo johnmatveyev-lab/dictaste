@@ -283,6 +283,16 @@ if (/id="hudCompact"|Compact HUD/i.test(settings)) {
 } else {
   fail("settings.html missing compact HUD");
 }
+if (/id="showWordCount"|word count/i.test(settings)) {
+  pass("settings.html has word count");
+} else {
+  fail("settings.html missing word count");
+}
+if (/id="importHistory"|Import history/i.test(settings)) {
+  pass("settings.html has import history");
+} else {
+  fail("settings.html missing import history");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -351,6 +361,10 @@ if (/smartQuotes|applySmartQuotes/.test(main)) pass("main smart quotes");
 else fail("main missing smart quotes");
 if (/hudCompact|setHudCompact|applyHudSize/.test(main)) pass("main compact HUD");
 else fail("main missing compact HUD");
+if (/showWordCount|notifyDeliver|countWords/.test(main)) pass("main word-count toast");
+else fail("main missing word-count toast");
+if (/importHistory|Import history/.test(main)) pass("main import history");
+else fail("main missing import history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
