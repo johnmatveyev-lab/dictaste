@@ -406,6 +406,8 @@ if (/continuousDictation|Continuous dictation/.test(main)) pass("main continuous
 else fail("main missing continuous dictation");
 if (/setConfigFlag|Quiet notifications/.test(main)) pass("main tray quick toggles");
 else fail("main missing tray quick toggles");
+if (/appendDictation|Append to last/.test(main)) pass("main append dictation");
+else fail("main missing append dictation");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

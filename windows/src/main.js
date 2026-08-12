@@ -1,6 +1,6 @@
 /**
  * Dictaste Windows MVP
- * - Continuous dictation · tray quick toggles (quiet/sound/auto-paste)
+ * - Append dictation to last · continuous dictation · tray quick toggles
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -128,6 +128,11 @@ function defaultConfig() {
      * Stop with the dictate hotkey, Cancel, or turn continuous off in tray/Settings.
      */
     continuousDictation: false,
+    /**
+     * When on, each new dictation is appended to the previous transcript
+     * (space-separated) before paste — great with continuous mode for long notes.
+     */
+    appendDictation: false,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -440,6 +445,7 @@ const SETTINGS_EXPORT_KEYS = [
   "minWordsForPolish",
   "minWordsForRead",
   "continuousDictation",
+  "appendDictation",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1667,7 +1673,7 @@ function copySupportDiagnostics() {
     `Polish: ${cfg?.polish !== false ? "on" : "off"} · minWordsPolish ${minWordsForPolishClamped()} · minWordsRead ${minWordsForReadClamped()}`,
     `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
-    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
+    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · append: ${cfg?.appendDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
     `History: ${normalizeHistory(cfg?.history).length}/${historyMaxClamped()}`,
     `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
     `Site: https://dictaste.vercel.app · Issues: https://github.com/johnmatveyev-lab/dictaste/issues`,
@@ -2075,8 +2081,14 @@ function setTrayLabel() {
   } else if (reading) {
     tray.setToolTip(`Dictaste — reading (${r} to stop)`);
   } else {
-    const cont = cfg?.continuousDictation ? " · continuous" : "";
-    tray.setToolTip(`Dictaste — dictate ${d} · ${lang}${cont}`);
+    const cont = [
+      cfg?.continuousDictation ? "continuous" : "",
+      cfg?.appendDictation ? "append" : "",
+    ]
+      .filter(Boolean)
+      .join("+");
+    const contLabel = cont ? ` · ${cont}` : "";
+    tray.setToolTip(`Dictaste — dictate ${d} · ${lang}${contLabel}`);
   }
 }
 
@@ -2643,6 +2655,13 @@ function rebuildTrayMenu() {
         setConfigFlag("continuousDictation", !!item.checked, "Continuous dictation"),
     },
     {
+      label: cfg?.appendDictation ? "Append to last ✓" : "Append to last",
+      type: "checkbox",
+      checked: !!cfg?.appendDictation,
+      click: (item) =>
+        setConfigFlag("appendDictation", !!item.checked, "Append to last"),
+    },
+    {
       label: cfg?.autoPaste !== false ? "Auto-paste ✓" : "Auto-paste",
       type: "checkbox",
       checked: cfg?.autoPaste !== false,
@@ -2961,6 +2980,7 @@ app.whenReady().then(() => {
   ipcMain.handle("set-config-flag", (_e, key, on) => {
     const labels = {
       continuousDictation: "Continuous dictation",
+      appendDictation: "Append to last",
       autoPaste: "Auto-paste",
       soundCues: "Sound cues",
       quietNotifications: "Quiet notifications",
@@ -3059,10 +3079,18 @@ app.whenReady().then(() => {
       return { polished: "" };
     }
     broadcastStatus({ phase: "polishing", last: raw });
-    const polished = await finalizeTranscript(raw);
+    let polished = await finalizeTranscript(raw);
+    if (cfg?.appendDictation) {
+      const prev = String(lastTranscript || normalizeHistory(cfg?.history)[0] || "").trim();
+      if (prev && polished) {
+        // Join with single space unless prev already ends with whitespace/newline
+        const joiner = /[\s\n]$/.test(prev) ? "" : " ";
+        polished = (prev + joiner + polished).trim();
+      }
+    }
     pushHistory(polished);
     const del = deliverText(polished);
-    broadcastStatus({ phase: "idle", last: polished });
+    broadcastStatus({ phase: "idle", last: polished, appended: !!cfg?.appendDictation });
     if (del.mode === "paste") {
       notifyDeliver(polished, "paste");
     } else if (del.mode === "clipboard") {
