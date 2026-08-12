@@ -394,6 +394,10 @@ if (/minWordsForRead|minWordsForReadClamped/.test(main)) pass("main skip short r
 else fail("main missing skip short reads");
 if (/liveWordLabel|countWords/.test(hud)) pass("hud live word count");
 else fail("hud missing live word count");
+if (/repolishLast|Re-polish last/.test(main)) pass("main re-polish last");
+else fail("main missing re-polish last");
+if (/copySupportDiagnostics|Copy support diagnostics/.test(main)) pass("main support diagnostics");
+else fail("main missing support diagnostics");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
  * - Re-read last · clear history (tray)
  * - Tray app + lime brand icon
@@ -1582,6 +1583,89 @@ function pasteLastTranscript(index = 0) {
 }
 
 /**
+ * Re-run polish pipeline on last (or indexed) transcript and paste result.
+ * Useful when the first polish was weak or offline cleanup-only.
+ */
+async function repolishLast(index = 0) {
+  const hist = normalizeHistory(cfg?.history);
+  const raw = String(
+    hist[index] || (index === 0 ? lastTranscript : "") || ""
+  ).trim();
+  if (!raw) {
+    notify("No transcript yet — dictate first", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  if (listening) {
+    await stopListening();
+    await sleep(150);
+  }
+  if (reading) stopSpeaking();
+  broadcastStatus({ phase: "polishing" });
+  notify(
+    `Re-polishing · ${raw.length > 48 ? raw.slice(0, 45) + "…" : raw}`,
+    { force: true }
+  );
+  try {
+    // Force network polish when user explicitly re-polishes (ignore min-words skip)
+    const prevPolish = cfg.polish;
+    const prevMin = cfg.minWordsForPolish;
+    cfg = { ...cfg, polish: true, minWordsForPolish: 0 };
+    let out = "";
+    try {
+      out = await finalizeTranscript(raw);
+    } finally {
+      cfg = { ...cfg, polish: prevPolish, minWordsForPolish: prevMin };
+    }
+    out = String(out || raw).trim();
+    if (!out) {
+      notify("Re-polish returned empty", { force: true });
+      broadcastStatus({ phase: "idle", error: "empty" });
+      return { ok: false, error: "empty" };
+    }
+    lastTranscript = out;
+    pushHistory(out);
+    const del = deliverText(out);
+    if (del.mode === "paste") notifyDeliver(out, "paste");
+    else notify(out.length > 80 ? out.slice(0, 77) + "…" : out, { force: true });
+    broadcastStatus({ phase: "idle", last: out, repolished: true });
+    rebuildTrayMenu();
+    return { ok: true, text: out, deliver: del.mode, words: del.words };
+  } catch (e) {
+    notify(`Re-polish failed: ${e.message || e}`, { force: true });
+    broadcastStatus({ phase: "idle", error: String(e.message || e) });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Copy non-secret support diagnostics to clipboard (version, OS, hotkeys, flags).
+ */
+function copySupportDiagnostics() {
+  const os = require("os");
+  const base = (cfg?.apiBase || DEFAULT_API).replace(/\/$/, "");
+  const lines = [
+    `Dictaste Windows ${appVersion()}`,
+    `Platform: ${process.platform} ${os.release()} ${process.arch}`,
+    `Electron: ${process.versions.electron || "?"} · Node ${process.versions.node || "?"}`,
+    `API: ${base}`,
+    `License: ${cfg?.licenseKey ? "set (" + String(cfg.licenseKey).slice(0, 8) + "…)" : "missing"}`,
+    `STT: ${cfg?.sttMode || "webspeech"} · ${cfg?.sttLang || "en-US"}`,
+    `TTS: ${cfg?.ttsEngine || "auto"} · rate ${cfg?.ttsRate ?? 0} · voice ${cfg?.ttsSapiVoice || "default"} / ${cfg?.ttsVoice || "alloy"}`,
+    `Polish: ${cfg?.polish !== false ? "on" : "off"} · minWordsPolish ${minWordsForPolishClamped()} · minWordsRead ${minWordsForReadClamped()}`,
+    `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
+    `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
+    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
+    `History: ${normalizeHistory(cfg?.history).length}/${historyMaxClamped()}`,
+    `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
+    `Site: https://dictaste.vercel.app · Issues: https://github.com/johnmatveyev-lab/dictaste/issues`,
+  ];
+  const text = lines.join("\n");
+  clipboard.writeText(text);
+  notify("Support diagnostics copied (no full secrets)", { force: true });
+  return { ok: true, text };
+}
+
+/**
  * Abort in-progress dictation without polish/paste.
  * Safe no-op when not listening.
  */
@@ -2378,6 +2462,19 @@ function rebuildTrayMenu() {
       click: () => pasteLastTranscript(0),
     },
     {
+      label: "Re-polish last",
+      enabled:
+        !!String(lastTranscript || cfg?.history?.[0] || "").trim() &&
+        !hotkeysPaused,
+      click: () => {
+        repolishLast(0).catch(() => {});
+      },
+    },
+    {
+      label: "Copy support diagnostics",
+      click: () => copySupportDiagnostics(),
+    },
+    {
       label: "Test voice",
       click: () => {
         testVoice().catch(() => {});
@@ -2477,6 +2574,13 @@ function rebuildTrayMenu() {
               {
                 label: "Copy to clipboard",
                 click: () => copyLastTranscript(i),
+              },
+              {
+                label: "Re-polish & paste",
+                enabled: !hotkeysPaused,
+                click: () => {
+                  repolishLast(i).catch(() => {});
+                },
               },
             ],
           })),
@@ -2678,6 +2782,10 @@ app.whenReady().then(() => {
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
   ipcMain.handle("clear-history", () => clearHistory());
   ipcMain.handle("reread-last", async () => rereadLast());
+  ipcMain.handle("repolish-last", async (_e, index) =>
+    repolishLast(Number(index) || 0)
+  );
+  ipcMain.handle("copy-support-diagnostics", () => copySupportDiagnostics());
   ipcMain.handle("get-hotkeys-paused", () => ({
     paused: hotkeysPaused,
     resumeAt: pauseResumeAt || null,

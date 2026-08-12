@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   resetHotkeys: () => ipcRenderer.invoke("reset-hotkeys"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),
   rereadLast: () => ipcRenderer.invoke("reread-last"),
+  repolishLast: (index) => ipcRenderer.invoke("repolish-last", index),
+  copySupportDiagnostics: () => ipcRenderer.invoke("copy-support-diagnostics"),
   getHotkeysPaused: () => ipcRenderer.invoke("get-hotkeys-paused"),
   setHotkeysPaused: (paused, opts) =>
     ipcRenderer.invoke("set-hotkeys-paused", paused, opts || {}),
