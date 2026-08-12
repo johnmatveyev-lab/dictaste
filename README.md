@@ -83,7 +83,7 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Dictaste-Setup-0.1.29.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.29.zip) · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space period · max duration · silence auto-stop · paste delay · cancel · paste last · spoken punctuation · strip fillers · pause hotkeys · export settings · highlight-to-speak  
+- [Dictaste-Setup-0.1.30.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.30.zip) · skip short polish · data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space period · max duration · silence auto-stop · paste delay · cancel · paste last · spoken punctuation · strip fillers · pause hotkeys · export settings · highlight-to-speak  
 - Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.4) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** (SmartScreen may warn) → tray → Settings → paste license  
 

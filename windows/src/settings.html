@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.29</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.30</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Word-count toasts after paste. Import history from a .txt export.
-    Smart quotes · compact HUD · tray language. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Skip AI polish for short phrases (saves quota). Open data folder · reset hotkeys.
+    Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -98,6 +98,9 @@
 
   <label>Paste delay <span id="pasteDelayVal" style="color:var(--lime)">80</span> ms (slow apps)</label>
   <input id="pasteDelay" type="range" min="0" max="500" step="20" value="80" style="width:100%;accent-color:var(--lime);" />
+
+  <label>Min words for AI polish <span id="minPolishVal" style="color:var(--lime)">3</span> (0 = always · skip short phrases)</label>
+  <input id="minWordsForPolish" type="range" min="0" max="15" step="1" value="3" style="width:100%;accent-color:var(--lime);" />
 
   <label>Max dictation <span id="maxDictVal" style="color:var(--lime)">90s</span> (0 = no cap · safety stop)</label>
   <input id="maxDictation" type="range" min="0" max="180" step="15" value="90" style="width:100%;accent-color:var(--lime);" />
@@ -215,6 +218,8 @@
     <button id="pause30" class="ghost">Pause 30 min</button>
     <button id="exportSettings" class="ghost">Export settings…</button>
     <button id="importSettings" class="ghost">Import settings…</button>
+    <button id="openData" class="ghost">Open data folder…</button>
+    <button id="resetHotkeys" class="ghost">Reset hotkeys</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
     <button id="unlock" class="ghost">Free developer unlock</button>
@@ -225,7 +230,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -322,6 +327,13 @@
         document.getElementById('pasteDelayVal').textContent = String(ms);
       }
       {
+        const mwRaw = c.minWordsForPolish;
+        const mw = Number.isFinite(Number(mwRaw)) ? Math.max(0, Math.min(15, Number(mwRaw))) : 3;
+        document.getElementById('minWordsForPolish').value = String(mw);
+        const v = Number(document.getElementById('minWordsForPolish').value) || 0;
+        document.getElementById('minPolishVal').textContent = v === 0 ? 'always' : String(v);
+      }
+      {
         const hm = Math.max(10, Math.min(50, Number(c.historyMax) || 25));
         document.getElementById('historyMax').value = String(hm);
         document.getElementById('historyMaxVal').textContent = String(hm);
@@ -371,6 +383,9 @@
         } else if (s.historyImported) {
           renderHistory().catch(() => {});
           document.getElementById('status').textContent = 'History imported';
+        } else if (s.hotkeysReset) {
+          document.getElementById('status').textContent = 'Hotkeys reset';
+          boot().catch(() => {});
         } else if (s.last) {
           document.getElementById('status').textContent = 'Done';
           document.getElementById('text').value = s.last;
@@ -462,6 +477,7 @@
           0,
           Math.min(500, Number(document.getElementById('pasteDelay').value) || 80)
         ),
+        minWordsForPolish: Math.max(0, Math.min(15, Number(document.getElementById('minWordsForPolish').value) || 0)),
         maxDictationMs:
           Math.max(0, Math.min(180, Number(document.getElementById('maxDictation').value) || 0)) *
           1000,
@@ -538,6 +554,10 @@
       document.getElementById('pasteDelayVal').textContent =
         document.getElementById('pasteDelay').value;
     };
+    document.getElementById('minWordsForPolish').oninput = () => {
+      const v = Number(document.getElementById('minWordsForPolish').value) || 0;
+      document.getElementById('minPolishVal').textContent = v === 0 ? 'always' : String(v);
+    };
     document.getElementById('maxDictation').oninput = () => {
       const sec = Number(document.getElementById('maxDictation').value) || 0;
       document.getElementById('maxDictVal').textContent = sec === 0 ? 'off' : sec + 's';
@@ -599,6 +619,19 @@
       } else {
         document.getElementById('status').textContent =
           r?.error === 'canceled' ? 'Import canceled' : (r?.error || 'Import failed');
+      }
+    };
+    document.getElementById('openData').onclick = async () => {
+      const r = await window.dictaste.openUserData();
+      document.getElementById('status').textContent = r?.ok ? 'Opened data folder' : (r?.error || 'Open failed');
+    };
+    document.getElementById('resetHotkeys').onclick = async () => {
+      const r = await window.dictaste.resetHotkeys();
+      if (r?.ok) {
+        document.getElementById('status').textContent = 'Hotkeys reset · reloading…';
+        await boot();
+      } else {
+        document.getElementById('status').textContent = r?.error || 'Reset failed';
       }
     };
     document.getElementById('testVoice').onclick = async () => {

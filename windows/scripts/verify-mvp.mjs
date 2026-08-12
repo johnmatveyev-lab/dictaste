@@ -293,6 +293,21 @@ if (/id="importHistory"|Import history/i.test(settings)) {
 } else {
   fail("settings.html missing import history");
 }
+if (/id="minWordsForPolish"|Min words for AI polish/i.test(settings)) {
+  pass("settings.html has min words for polish");
+} else {
+  fail("settings.html missing min words for polish");
+}
+if (/id="openData"|Open data folder/i.test(settings)) {
+  pass("settings.html has open data folder");
+} else {
+  fail("settings.html missing open data folder");
+}
+if (/id="resetHotkeys"|Reset hotkeys/i.test(settings)) {
+  pass("settings.html has reset hotkeys");
+} else {
+  fail("settings.html missing reset hotkeys");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -365,6 +380,12 @@ if (/showWordCount|notifyDeliver|countWords/.test(main)) pass("main word-count t
 else fail("main missing word-count toast");
 if (/importHistory|Import history/.test(main)) pass("main import history");
 else fail("main missing import history");
+if (/minWordsForPolish|minWordsForPolishClamped/.test(main)) pass("main skip polish under N words");
+else fail("main missing skip polish under N words");
+if (/openUserDataFolder|Open data folder/.test(main)) pass("main open data folder");
+else fail("main missing open data folder");
+if (/resetHotkeys|Reset hotkeys/.test(main)) pass("main reset hotkeys");
+else fail("main missing reset hotkeys");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

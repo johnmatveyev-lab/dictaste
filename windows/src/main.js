@@ -29,6 +29,7 @@
  * - Tray language switcher + case modes (sentence/lower/upper/title)
  * - Smart quotes / em dash + compact HUD
  * - Word-count toast + import history
+ * - Skip polish under N words + open data folder + reset hotkeys
  */
 const {
   app,
@@ -104,6 +105,11 @@ function defaultConfig() {
      * After paste/copy, toast includes word count (e.g. "Pasted · 42 words").
      */
     showWordCount: true,
+    /**
+     * Skip managed AI polish when transcript has fewer than this many words.
+     * Offline cleanup (punctuation, fillers, smart quotes) still runs. 0 = always polish.
+     */
+    minWordsForPolish: 3,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -411,6 +417,7 @@ const SETTINGS_EXPORT_KEYS = [
   "smartQuotes",
   "hudCompact",
   "showWordCount",
+  "minWordsForPolish",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1281,9 +1288,23 @@ async function finalizeTranscript(text) {
   return out.trim();
 }
 
+function minWordsForPolishClamped() {
+  const n = Number(cfg?.minWordsForPolish);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(0, Math.min(50, Math.round(n)));
+}
+
 async function polishText(text) {
   if (!cfg.polish || !text.trim()) return text;
   if (!cfg.licenseKey) return text;
+  const minW = minWordsForPolishClamped();
+  if (minW > 0) {
+    const wc = countWords(text);
+    if (wc > 0 && wc < minW) {
+      // Short utterances: skip network polish (saves quota / latency)
+      return text;
+    }
+  }
   const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
   try {
     const { status, json } = await requestJson(`${base}/api/v1/polish`, {
@@ -2128,6 +2149,58 @@ function appVersion() {
   }
 }
 
+/** Open Electron userData (config.json lives here). */
+function openUserDataFolder() {
+  try {
+    const dir = app.getPath("userData");
+    fs.mkdirSync(dir, { recursive: true });
+    shell.openPath(dir);
+    notify("Opened data folder", { force: true });
+    return { ok: true, path: dir };
+  } catch (e) {
+    notify(`Open data folder failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/** Restore default hotkeys and re-register. */
+function resetHotkeys() {
+  cfg = {
+    ...cfg,
+    hotkeyDictate: DEFAULT_HOTKEY_DICTATE,
+    hotkeyRead: DEFAULT_HOTKEY_READ,
+    hotkeyPolish: DEFAULT_HOTKEY_POLISH,
+    hotkeyCancel: DEFAULT_HOTKEY_CANCEL,
+    hotkeyPasteLast: DEFAULT_HOTKEY_PASTE_LAST,
+  };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  if (!hotkeysPaused) registerHotkeys();
+  else rebuildTrayMenu();
+  notify(
+    `Hotkeys reset · Dictate ${toDisplayHotkey(DEFAULT_HOTKEY_DICTATE)} · Read ${toDisplayHotkey(DEFAULT_HOTKEY_READ)}`,
+    { force: true }
+  );
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send("status", {
+      phase: "idle",
+      hotkeysReset: true,
+      configHint: true,
+    });
+  }
+  return {
+    ok: true,
+    hotkeyDictate: cfg.hotkeyDictate,
+    hotkeyRead: cfg.hotkeyRead,
+    hotkeyPolish: cfg.hotkeyPolish,
+    hotkeyCancel: cfg.hotkeyCancel,
+    hotkeyPasteLast: cfg.hotkeyPasteLast,
+  };
+}
+
 function rebuildTrayMenu() {
   if (!tray) return;
   const base = () => (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
@@ -2282,6 +2355,14 @@ function rebuildTrayMenu() {
     {
       label: "Export settings…",
       click: () => exportSettings({ includeSecrets: false }),
+    },
+    {
+      label: "Open data folder…",
+      click: () => openUserDataFolder(),
+    },
+    {
+      label: "Reset hotkeys to defaults",
+      click: () => resetHotkeys(),
     },
     {
       label: `Recent transcripts (${normalizeHistory(cfg?.history).length}/${historyMaxClamped()})`,
@@ -2493,6 +2574,8 @@ app.whenReady().then(() => {
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
   ipcMain.handle("export-history", () => exportHistory());
   ipcMain.handle("import-history", async () => importHistory());
+  ipcMain.handle("open-user-data", () => openUserDataFolder());
+  ipcMain.handle("reset-hotkeys", () => resetHotkeys());
   ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
   ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
