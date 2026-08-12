@@ -414,6 +414,8 @@ if (/modeSuffix|appendDictation/.test(hud)) pass("hud mode chips");
 else fail("hud missing mode chips");
 if (/undoLastDictation|Undo last dictation/.test(main)) pass("main undo last");
 else fail("main missing undo last");
+if (/deleteHistoryAt|Delete from history/.test(main)) pass("main delete history item");
+else fail("main missing delete history item");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.38</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.39</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Undo last dictation · append joiner · HUD modes.
+    Dictate · highlight-to-speak · polish selection. Delete history item · undo last · append joiner.
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -204,7 +204,7 @@
 
   <label>Recent transcripts (click = paste · Shift-click = copy)</label>
   <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
-    Dictate once to build history.
+    Dictate once to build history. Click to paste · Shift+click copy · ✕ deletes.
   </div>
   <div class="row" style="margin-top:8px">
     <button type="button" id="refreshHistory" class="ghost">Refresh history</button>
@@ -448,17 +448,20 @@
         hist = [];
       }
       if (!hist.length) {
-        el.textContent = 'Dictate once to build history.';
+        el.textContent = 'Dictate once to build history. Click to paste · Shift+click copy · ✕ deletes.';
         return;
       }
       el.innerHTML = '';
       hist.forEach((t, i) => {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;margin:0 0 6px;';
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'ghost';
         row.style.cssText =
-          'display:block;width:100%;text-align:left;margin:0 0 6px;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;';
+          'flex:1;text-align:left;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;';
         row.textContent = (i + 1) + '. ' + (t.length > 140 ? t.slice(0, 137) + '…' : t);
+        row.title = 'Click to paste · Shift+click to copy';
         row.onclick = async (ev) => {
           document.getElementById('text').value = t;
           if (ev.shiftKey) {
@@ -471,7 +474,22 @@
               : (r?.error || 'Paste failed');
           }
         };
-        el.appendChild(row);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'ghost';
+        del.style.cssText = 'flex-shrink:0;padding:6px 10px;font-size:0.75rem;';
+        del.textContent = '✕';
+        del.title = 'Delete from history';
+        del.onclick = async () => {
+          const r = await window.dictaste.deleteHistoryAt(i);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Deleted #' + (i + 1) + ' · ' + (r.remaining || 0) + ' left')
+            : (r?.error || 'Delete failed');
+          await renderHistory();
+        };
+        wrap.appendChild(row);
+        wrap.appendChild(del);
+        el.appendChild(wrap);
       });
     }
 

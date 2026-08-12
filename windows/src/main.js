@@ -1,6 +1,6 @@
 /**
  * Dictaste Windows MVP
- * - Undo last dictation · append joiner · HUD mode chips · continuous
+ * - Delete history item · undo last · append joiner · HUD modes
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -1635,6 +1635,40 @@ function undoLastDictation() {
   };
 }
 
+/**
+ * Remove a single history entry by index (0 = newest).
+ */
+function deleteHistoryAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const hist = normalizeHistory(cfg?.history);
+  if (!hist.length || i >= hist.length) {
+    notify("No history item to delete", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const removed = hist[i];
+  const next = hist.filter((_, idx) => idx !== i);
+  if (i === 0) {
+    lastTranscript = next[0] || "";
+  } else if (String(lastTranscript || "").trim() === String(removed || "").trim()) {
+    lastTranscript = next[0] || "";
+  }
+  cfg = { ...cfg, history: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  const preview = String(removed || "").trim();
+  notify(
+    preview
+      ? `Deleted · ${preview.length > 48 ? preview.slice(0, 45) + "…" : preview}`
+      : "Deleted history item",
+    { force: true }
+  );
+  return { ok: true, removed: preview, remaining: next.length };
+}
+
 function copyLastTranscript(index = 0) {
   const hist = normalizeHistory(cfg?.history);
   const t = String(
@@ -2881,6 +2915,10 @@ function rebuildTrayMenu() {
                   repolishLast(i).catch(() => {});
                 },
               },
+              {
+                label: "Delete from history",
+                click: () => deleteHistoryAt(i),
+              },
             ],
           })),
           { type: "separator" },
@@ -3101,6 +3139,9 @@ app.whenReady().then(() => {
   ipcMain.handle("clear-history", () => clearHistory());
   ipcMain.handle("reread-last", async () => rereadLast());
   ipcMain.handle("undo-last-dictation", () => undoLastDictation());
+  ipcMain.handle("delete-history-at", (_e, index) =>
+    deleteHistoryAt(Number(index) || 0)
+  );
   ipcMain.handle("repolish-last", async (_e, index) =>
     repolishLast(Number(index) || 0)
   );
