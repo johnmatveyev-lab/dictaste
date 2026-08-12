@@ -24,6 +24,7 @@
  * - Cancel/discard dictation + paste last transcript hotkey
  * - Silence auto-stop + configurable paste delay
  * - Double-space → period + max dictation duration safety
+ * - Persist pause hotkeys + timed pause (5/15/30 min auto-resume)
  */
 const {
   app,
@@ -115,6 +116,13 @@ function defaultConfig() {
      * Errors, quota, and update prompts still notify.
      */
     quietNotifications: false,
+    /**
+     * When true, Pause hotkeys state is saved to config and restored on launch.
+     * Timed pauses also honor this for the duration of the pause.
+     */
+    persistPauseHotkeys: true,
+    /** Restored when persistPauseHotkeys is on */
+    hotkeysPaused: false,
     /** Soft beep on dictation start/stop (HUD WebAudio) */
     soundCues: true,
     /**
@@ -281,7 +289,30 @@ function registerHotkeys() {
   };
 }
 
-function setHotkeysPaused(paused) {
+/** @type {ReturnType<typeof setTimeout> | null} */
+let pauseResumeTimer = null;
+/** Unix ms when timed pause ends (0 = indefinite) */
+let pauseResumeAt = 0;
+
+function clearPauseResumeTimer() {
+  if (pauseResumeTimer) {
+    clearTimeout(pauseResumeTimer);
+    pauseResumeTimer = null;
+  }
+  pauseResumeAt = 0;
+}
+
+/**
+ * Pause or resume global hotkeys.
+ * @param {boolean} paused
+ * @param {{ minutes?: number, silent?: boolean, persist?: boolean }} [opts]
+ *   minutes>0 → auto-resume after that many minutes
+ *   persist → write hotkeysPaused into config when persistPauseHotkeys on
+ */
+function setHotkeysPaused(paused, opts = {}) {
+  const minutes = Number(opts.minutes) > 0 ? Number(opts.minutes) : 0;
+  const silent = !!opts.silent;
+  clearPauseResumeTimer();
   hotkeysPaused = !!paused;
   if (hotkeysPaused) {
     try {
@@ -291,14 +322,54 @@ function setHotkeysPaused(paused) {
     }
     if (listening) stopListening();
     if (reading) stopSpeaking();
-    notify("Hotkeys paused — resume from tray", { force: true });
+    if (minutes > 0) {
+      pauseResumeAt = Date.now() + Math.round(minutes * 60_000);
+      pauseResumeTimer = setTimeout(() => {
+        pauseResumeTimer = null;
+        pauseResumeAt = 0;
+        setHotkeysPaused(false, { silent: false });
+      }, Math.round(minutes * 60_000));
+      if (!silent) {
+        notify(
+          `Hotkeys paused ${minutes} min — auto-resume at ${new Date(pauseResumeAt).toLocaleTimeString()}`,
+          { force: true }
+        );
+      }
+    } else if (!silent) {
+      notify("Hotkeys paused — resume from tray", { force: true });
+    }
   } else {
     registerHotkeys();
-    notify("Hotkeys resumed", { force: true });
+    if (!silent) notify("Hotkeys resumed", { force: true });
+  }
+  // Persist indefinite pause (not timed) when enabled
+  const shouldPersist =
+    opts.persist !== false &&
+    cfg?.persistPauseHotkeys !== false &&
+    minutes <= 0;
+  if (shouldPersist && cfg) {
+    cfg = { ...cfg, hotkeysPaused };
+    try {
+      saveConfig(cfg);
+    } catch {
+      /* ignore */
+    }
+  } else if (!hotkeysPaused && cfg?.hotkeysPaused && cfg?.persistPauseHotkeys !== false) {
+    // Clear persisted pause on resume
+    cfg = { ...cfg, hotkeysPaused: false };
+    try {
+      saveConfig(cfg);
+    } catch {
+      /* ignore */
+    }
   }
   rebuildTrayMenu();
   setTrayLabel();
-  return { paused: hotkeysPaused };
+  return {
+    paused: hotkeysPaused,
+    resumeAt: pauseResumeAt || null,
+    minutes: minutes || null,
+  };
 }
 
 const SETTINGS_EXPORT_KEYS = [
@@ -320,6 +391,7 @@ const SETTINGS_EXPORT_KEYS = [
   "ttsVoice",
   "launchAtLogin",
   "quietNotifications",
+  "persistPauseHotkeys",
   "soundCues",
   "replacements",
   "autoCapitalize",
@@ -454,7 +526,7 @@ let speakProc = null;
 let cfg = null;
 /** Last polished dictation (tray Copy last transcript) */
 let lastTranscript = "";
-/** Runtime: global hotkeys unbound until resumed (not persisted) */
+/** Runtime: global hotkeys unbound until resumed (optionally persisted) */
 let hotkeysPaused = false;
 
 function sleep(ms) {
@@ -1603,7 +1675,12 @@ function setTrayLabel() {
   const d = toDisplayHotkey(hotkeyDictateAccel());
   const r = toDisplayHotkey(hotkeyReadAccel());
   if (hotkeysPaused) {
-    tray.setToolTip("Dictaste — hotkeys paused");
+    if (pauseResumeAt > Date.now()) {
+      const mins = Math.max(1, Math.ceil((pauseResumeAt - Date.now()) / 60_000));
+      tray.setToolTip(`Dictaste — hotkeys paused (~${mins}m left)`);
+    } else {
+      tray.setToolTip("Dictaste — hotkeys paused");
+    }
   } else if (listening) {
     tray.setToolTip(`Dictaste — listening (${d} to stop)`);
   } else if (reading) {
@@ -1758,7 +1835,11 @@ function rebuildTrayMenu() {
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
     {
-      label: hotkeysPaused ? "Hotkeys: PAUSED" : "Hotkeys: active",
+      label: hotkeysPaused
+        ? pauseResumeAt > Date.now()
+          ? `Hotkeys: PAUSED (until ${new Date(pauseResumeAt).toLocaleTimeString()})`
+          : "Hotkeys: PAUSED"
+        : "Hotkeys: active",
       enabled: false,
     },
     { type: "separator" },
@@ -1788,6 +1869,28 @@ function rebuildTrayMenu() {
     {
       label: hotkeysPaused ? "Resume hotkeys" : "Pause hotkeys",
       click: () => setHotkeysPaused(!hotkeysPaused),
+    },
+    {
+      label: "Pause hotkeys…",
+      enabled: !hotkeysPaused,
+      submenu: [
+        {
+          label: "Pause 5 minutes",
+          click: () => setHotkeysPaused(true, { minutes: 5 }),
+        },
+        {
+          label: "Pause 15 minutes",
+          click: () => setHotkeysPaused(true, { minutes: 15 }),
+        },
+        {
+          label: "Pause 30 minutes",
+          click: () => setHotkeysPaused(true, { minutes: 30 }),
+        },
+        {
+          label: "Pause until resume (remember)",
+          click: () => setHotkeysPaused(true, { persist: true }),
+        },
+      ],
     },
     {
       label: `Cancel dictation (${toDisplayHotkey(hotkeyCancelAccel())})`,
@@ -1899,12 +2002,33 @@ app.whenReady().then(() => {
   cfg.hotkeyCancel = hotkeyCancelAccel();
   cfg.hotkeyPasteLast = hotkeyPasteLastAccel();
   applyLaunchAtLogin(cfg.launchAtLogin);
+  // Restore paused state from prior session when enabled
+  if (cfg.persistPauseHotkeys !== false && cfg.hotkeysPaused) {
+    hotkeysPaused = true;
+  }
   createTray();
   ensureHud();
-  registerHotkeys();
+  if (hotkeysPaused) {
+    try {
+      globalShortcut.unregisterAll();
+    } catch {
+      /* ignore */
+    }
+    rebuildTrayMenu();
+    setTrayLabel();
+    setTimeout(() => {
+      notify("Hotkeys still paused from last session — resume from tray", {
+        force: true,
+      });
+    }, 1500);
+  } else {
+    registerHotkeys();
+  }
 
   ipcMain.handle("get-config", () => ({
     ...cfg,
+    hotkeysPausedRuntime: hotkeysPaused,
+    pauseResumeAt: pauseResumeAt || null,
     hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
     hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
     hotkeyPolishDisplay: toDisplayHotkey(hotkeyPolishAccel()),
@@ -1990,8 +2114,16 @@ app.whenReady().then(() => {
     rebuildTrayMenu();
     return true;
   });
-  ipcMain.handle("get-hotkeys-paused", () => ({ paused: hotkeysPaused }));
-  ipcMain.handle("set-hotkeys-paused", (_e, paused) => setHotkeysPaused(!!paused));
+  ipcMain.handle("get-hotkeys-paused", () => ({
+    paused: hotkeysPaused,
+    resumeAt: pauseResumeAt || null,
+  }));
+  ipcMain.handle("set-hotkeys-paused", (_e, paused, opts) =>
+    setHotkeysPaused(!!paused, opts && typeof opts === "object" ? opts : {})
+  );
+  ipcMain.handle("pause-hotkeys-for", (_e, minutes) =>
+    setHotkeysPaused(true, { minutes: Number(minutes) || 0 })
+  );
   ipcMain.handle("export-settings", (_e, opts) =>
     exportSettings(opts || { includeSecrets: false })
   );

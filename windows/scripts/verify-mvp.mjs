@@ -248,6 +248,16 @@ if (/id="maxDictation"|Max dictation/i.test(settings)) {
 } else {
   fail("settings.html missing max dictation");
 }
+if (/id="persistPauseHotkeys"|Remember pause/i.test(settings)) {
+  pass("settings.html has persist pause");
+} else {
+  fail("settings.html missing persist pause");
+}
+if (/id="pause5"|Pause 5 min/i.test(settings)) {
+  pass("settings.html has timed pause buttons");
+} else {
+  fail("settings.html missing timed pause buttons");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -299,6 +309,8 @@ if (/doubleSpacePeriod|applyDoubleSpacePeriod/.test(main)) pass("main double-spa
 else fail("main missing double-space period");
 if (/maxDictationMs|maxDictationMsClamped/.test(main)) pass("main max dictation");
 else fail("main missing max dictation");
+if (/persistPauseHotkeys|pauseResumeAt|pauseHotkeysFor|Pause 15 minutes/.test(main)) pass("main timed/persist pause");
+else fail("main missing timed/persist pause");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

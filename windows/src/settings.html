@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.24</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.25</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Double-space becomes a period. Max duration safety-stops long sessions.
-    Silence auto-stop · paste delay · cancel · paste last. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Pause hotkeys for 5/15/30 minutes (auto-resume) or until you resume — optionally remembered across restarts.
+    Double-space period · max duration · silence auto-stop. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -71,6 +71,7 @@
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation (off = copy to clipboard only)</label>
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
+    <label><input type="checkbox" id="persistPauseHotkeys" checked /> Remember pause hotkeys across restarts</label>
     <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
     <label><input type="checkbox" id="autoCapitalize" checked /> Auto-capitalize sentence starts</label>
     <label><input type="checkbox" id="spokenPunctuation" checked /> Spoken punctuation (period, comma, new line…)</label>
@@ -194,6 +195,9 @@
     <button id="pasteLast" class="ghost">Paste last transcript</button>
     <button id="cancelDict" class="ghost">Cancel dictation</button>
     <button id="pauseHotkeys" class="ghost">Pause hotkeys</button>
+    <button id="pause5" class="ghost">Pause 5 min</button>
+    <button id="pause15" class="ghost">Pause 15 min</button>
+    <button id="pause30" class="ghost">Pause 30 min</button>
     <button id="exportSettings" class="ghost">Export settings…</button>
     <button id="importSettings" class="ghost">Import settings…</button>
     <button id="run" class="ghost">Polish & paste</button>
@@ -206,7 +210,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Double-space → period · max duration safety-stop · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Timed pause (5/15/30 min auto-resume) · remember pause across restarts · double-space period · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -273,6 +277,7 @@
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
+      document.getElementById('persistPauseHotkeys').checked = c.persistPauseHotkeys !== false;
       document.getElementById('soundCues').checked = c.soundCues !== false;
       document.getElementById('autoCapitalize').checked = c.autoCapitalize !== false;
       document.getElementById('spokenPunctuation').checked = c.spokenPunctuation !== false;
@@ -349,7 +354,9 @@
       const btn = document.getElementById('pauseHotkeys');
       if (st?.paused) {
         banner.style.display = 'block';
-        banner.textContent = 'Global hotkeys are paused. Tray actions still work; click Resume hotkeys to rebind.';
+        banner.textContent = st?.resumeAt
+          ? ('Global hotkeys paused until ' + new Date(st.resumeAt).toLocaleTimeString() + '. Tray actions still work.')
+          : 'Global hotkeys are paused. Tray actions still work; click Resume hotkeys to rebind.';
         btn.textContent = 'Resume hotkeys';
       } else {
         banner.style.display = 'none';
@@ -394,6 +401,7 @@
         autoPaste: document.getElementById('autoPaste').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
         quietNotifications: document.getElementById('quietNotifications').checked,
+        persistPauseHotkeys: document.getElementById('persistPauseHotkeys').checked,
         soundCues: document.getElementById('soundCues').checked,
         autoCapitalize: document.getElementById('autoCapitalize').checked,
         spokenPunctuation: document.getElementById('spokenPunctuation').checked,
@@ -521,6 +529,14 @@
         ? 'Hotkeys paused'
         : 'Hotkeys resumed';
     };
+    async function timedPause(mins) {
+      await window.dictaste.pauseHotkeysFor(mins);
+      await refreshPauseBanner();
+      document.getElementById('status').textContent = 'Hotkeys paused ' + mins + ' min';
+    }
+    document.getElementById('pause5').onclick = () => timedPause(5);
+    document.getElementById('pause15').onclick = () => timedPause(15);
+    document.getElementById('pause30').onclick = () => timedPause(30);
     document.getElementById('exportSettings').onclick = async () => {
       const r = await window.dictaste.exportSettings({ includeSecrets: false });
       document.getElementById('status').textContent = r?.ok
