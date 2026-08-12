@@ -398,6 +398,10 @@ if (/repolishLast|Re-polish last/.test(main)) pass("main re-polish last");
 else fail("main missing re-polish last");
 if (/copySupportDiagnostics|Copy support diagnostics/.test(main)) pass("main support diagnostics");
 else fail("main missing support diagnostics");
+if (/persistHudPosition|resetHudPosition|hudPosX/.test(main)) pass("main sticky HUD");
+else fail("main missing sticky HUD");
+if (/setTtsRate|Speech rate/.test(main)) pass("main tray speech rate");
+else fail("main missing tray speech rate");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
  * - Re-read last · clear history (tray)
@@ -104,6 +105,9 @@ function defaultConfig() {
      * Compact HUD: smaller pill, hide live partial transcript line.
      */
     hudCompact: false,
+    /** Saved HUD origin (null = OS default / top-center on first show). */
+    hudPosX: null,
+    hudPosY: null,
     /**
      * After paste/copy, toast includes word count (e.g. "Pasted · 42 words").
      */
@@ -424,6 +428,8 @@ const SETTINGS_EXPORT_KEYS = [
   "doubleSpacePeriod",
   "smartQuotes",
   "hudCompact",
+  "hudPosX",
+  "hudPosY",
   "showWordCount",
   "minWordsForPolish",
   "minWordsForRead",
@@ -2081,6 +2087,85 @@ function hudSize() {
   return { width: 360, height: 120 };
 }
 
+function savedHudOrigin() {
+  const x = cfg?.hudPosX;
+  const y = cfg?.hudPosY;
+  if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return null;
+  return { x: Math.round(Number(x)), y: Math.round(Number(y)) };
+}
+
+function clampHudOrigin(x, y, width, height) {
+  const { screen } = require("electron");
+  const pt = { x: x + width / 2, y: y + 8 };
+  const disp = screen.getDisplayNearestPoint(pt);
+  const b = disp.workArea;
+  const nx = Math.max(b.x + 4, Math.min(x, b.x + b.width - width - 4));
+  const ny = Math.max(b.y + 4, Math.min(y, b.y + b.height - height - 4));
+  return { x: Math.round(nx), y: Math.round(ny) };
+}
+
+function defaultHudOrigin(width, height) {
+  const { screen } = require("electron");
+  const { workArea } = screen.getPrimaryDisplay();
+  return {
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
+    y: Math.round(workArea.y + 48),
+  };
+}
+
+function applyHudPosition() {
+  if (!hudWin || hudWin.isDestroyed()) return;
+  const { width, height } = hudSize();
+  const saved = savedHudOrigin();
+  const origin = saved
+    ? clampHudOrigin(saved.x, saved.y, width, height)
+    : defaultHudOrigin(width, height);
+  try {
+    hudWin.setPosition(origin.x, origin.y);
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistHudPosition() {
+  if (!hudWin || hudWin.isDestroyed()) return;
+  try {
+    const [x, y] = hudWin.getPosition();
+    const { width, height } = hudWin.getBounds();
+    const c = clampHudOrigin(x, y, width, height);
+    cfg = { ...cfg, hudPosX: c.x, hudPosY: c.y };
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+}
+
+function resetHudPosition() {
+  cfg = { ...cfg, hudPosX: null, hudPosY: null };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  applyHudPosition();
+  rebuildTrayMenu();
+  notify("HUD position reset", { force: true });
+  return { ok: true };
+}
+
+function setTtsRate(rate) {
+  const n = Math.max(-10, Math.min(10, Math.round(Number(rate) || 0)));
+  cfg = { ...cfg, ttsRate: n };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  notify(`Speech rate ${n}`, { force: true });
+  return { ok: true, ttsRate: n };
+}
+
 function ensureHud() {
   if (hudWin && !hudWin.isDestroyed()) return hudWin;
   const { width, height } = hudSize();
@@ -2091,6 +2176,7 @@ function ensureHud() {
     transparent: true,
     alwaysOnTop: true,
     resizable: false,
+    movable: true,
     skipTaskbar: true,
     show: false,
     backgroundColor: "#00000000",
@@ -2100,9 +2186,16 @@ function ensureHud() {
     },
   });
   hudWin.loadFile(path.join(__dirname, "hud.html"));
+  // Persist after user drags the pill (electron emits moved when drag ends on some platforms; also poll via move)
+  let moveSaveTimer = null;
+  hudWin.on("moved", () => {
+    if (moveSaveTimer) clearTimeout(moveSaveTimer);
+    moveSaveTimer = setTimeout(() => persistHudPosition(), 200);
+  });
   hudWin.on("closed", () => {
     hudWin = null;
   });
+  applyHudPosition();
   return hudWin;
 }
 
@@ -2136,6 +2229,7 @@ function setHudCompact(on) {
 function showHud() {
   const w = ensureHud();
   applyHudSize();
+  applyHudPosition();
   w.showInactive();
   w.setAlwaysOnTop(true, "screen-saver");
 }
@@ -2525,6 +2619,39 @@ function rebuildTrayMenu() {
       click: (item) => setHudCompact(!!item.checked),
     },
     {
+      label: "Reset HUD position",
+      click: () => resetHudPosition(),
+    },
+    {
+      label: `Speech rate · ${Number.isFinite(Number(cfg?.ttsRate)) ? cfg.ttsRate : 0}`,
+      submenu: [
+        {
+          label: "Slow (−5)",
+          type: "radio",
+          checked: Number(cfg?.ttsRate) === -5,
+          click: () => setTtsRate(-5),
+        },
+        {
+          label: "Normal (0)",
+          type: "radio",
+          checked: !Number(cfg?.ttsRate),
+          click: () => setTtsRate(0),
+        },
+        {
+          label: "Fast (+5)",
+          type: "radio",
+          checked: Number(cfg?.ttsRate) === 5,
+          click: () => setTtsRate(5),
+        },
+        {
+          label: "Faster (+8)",
+          type: "radio",
+          checked: Number(cfg?.ttsRate) === 8,
+          click: () => setTtsRate(8),
+        },
+      ],
+    },
+    {
       label: cfg?.smartQuotes !== false ? "Smart quotes ✓" : "Smart quotes",
       type: "checkbox",
       checked: cfg?.smartQuotes !== false,
@@ -2780,6 +2907,8 @@ app.whenReady().then(() => {
   ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
   ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
+  ipcMain.handle("reset-hud-position", () => resetHudPosition());
+  ipcMain.handle("set-tts-rate", (_e, rate) => setTtsRate(rate));
   ipcMain.handle("clear-history", () => clearHistory());
   ipcMain.handle("reread-last", async () => rereadLast());
   ipcMain.handle("repolish-last", async (_e, index) =>
