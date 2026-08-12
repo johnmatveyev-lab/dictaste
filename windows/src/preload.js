@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   cancelDictation: () => ipcRenderer.invoke("cancel-dictation"),
   setSttLang: (lang) => ipcRenderer.invoke("set-stt-lang", lang),
   setCaseMode: (mode) => ipcRenderer.invoke("set-case-mode", mode),
+  setHudCompact: (on) => ipcRenderer.invoke("set-hud-compact", on),
   getHistory: () => ipcRenderer.invoke("get-history"),
   exportHistory: () => ipcRenderer.invoke("export-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),

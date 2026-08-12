@@ -273,6 +273,16 @@ if (/id="caseMode"|Case mode/i.test(settings)) {
 } else {
   fail("settings.html missing case mode");
 }
+if (/id="smartQuotes"|Smart quotes/i.test(settings)) {
+  pass("settings.html has smart quotes");
+} else {
+  fail("settings.html missing smart quotes");
+}
+if (/id="hudCompact"|Compact HUD/i.test(settings)) {
+  pass("settings.html has compact HUD");
+} else {
+  fail("settings.html missing compact HUD");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -298,6 +308,11 @@ if (/maxDictationMs|armMaxDurationTimer/i.test(hud)) {
   pass("hud.html has max dictation duration");
 } else {
   fail("hud.html missing max dictation duration");
+}
+if (/body\.compact|applyCompact|hudCompact/i.test(hud)) {
+  pass("hud.html has compact style");
+} else {
+  fail("hud.html missing compact style");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);
@@ -332,6 +347,10 @@ if (/setSttLang|STT_LANG_LABELS|Language ·/.test(main)) pass("main tray languag
 else fail("main missing tray language switcher");
 if (/caseMode|applyCaseMode|setCaseMode/.test(main)) pass("main case modes");
 else fail("main missing case modes");
+if (/smartQuotes|applySmartQuotes/.test(main)) pass("main smart quotes");
+else fail("main missing smart quotes");
+if (/hudCompact|setHudCompact|applyHudSize/.test(main)) pass("main compact HUD");
+else fail("main missing compact HUD");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.27</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.28</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Switch dictation language from the tray. Case modes: sentence / lower / UPPER / Title.
-    Paste from history · timed pause · double-space period. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Smart quotes (“ ” · —). Compact HUD hides live partials.
+    Tray language · case modes · paste from history. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -77,6 +77,8 @@
     <label><input type="checkbox" id="spokenPunctuation" checked /> Spoken punctuation (period, comma, new line…)</label>
     <label><input type="checkbox" id="stripFillers" checked /> Strip fillers (um, uh, you know…)</label>
     <label><input type="checkbox" id="doubleSpacePeriod" checked /> Double-space → period (iOS-style)</label>
+    <label><input type="checkbox" id="smartQuotes" checked /> Smart quotes &amp; em dash (“ ” · —)</label>
+    <label><input type="checkbox" id="hudCompact" /> Compact HUD (smaller · hide live partial)</label>
   </div>
 
   <label>Text replacements <span style="font-weight:400;color:var(--muted)">(one per line: find=replace)</span></label>
@@ -221,7 +223,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Tray language switcher · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -294,6 +296,8 @@
       document.getElementById('spokenPunctuation').checked = c.spokenPunctuation !== false;
       document.getElementById('stripFillers').checked = c.stripFillers !== false;
       document.getElementById('doubleSpacePeriod').checked = c.doubleSpacePeriod !== false;
+      document.getElementById('smartQuotes').checked = c.smartQuotes !== false;
+      document.getElementById('hudCompact').checked = !!c.hudCompact;
       document.getElementById('replacements').value = c.replacements || '';
       {
         const suf = c.pasteSuffix;
@@ -437,6 +441,8 @@
         spokenPunctuation: document.getElementById('spokenPunctuation').checked,
         stripFillers: document.getElementById('stripFillers').checked,
         doubleSpacePeriod: document.getElementById('doubleSpacePeriod').checked,
+        smartQuotes: document.getElementById('smartQuotes').checked,
+        hudCompact: document.getElementById('hudCompact').checked,
         replacements: document.getElementById('replacements').value,
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;

@@ -27,6 +27,7 @@
  * - Persist pause hotkeys + timed pause (5/15/30 min auto-resume)
  * - Paste from history (tray) + deeper history (up to 50)
  * - Tray language switcher + case modes (sentence/lower/upper/title)
+ * - Smart quotes / em dash + compact HUD
  */
 const {
   app,
@@ -89,6 +90,15 @@ function defaultConfig() {
      * Applied offline before polish; skips when already after punctuation.
      */
     doubleSpacePeriod: true,
+    /**
+     * Smart typography: "quotes" → “ ” · 'quotes' → ‘ ’ · -- → —
+     * Applied offline before polish.
+     */
+    smartQuotes: true,
+    /**
+     * Compact HUD: smaller pill, hide live partial transcript line.
+     */
+    hudCompact: false,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -393,6 +403,8 @@ const SETTINGS_EXPORT_KEYS = [
   "silenceTimeoutMs",
   "maxDictationMs",
   "doubleSpacePeriod",
+  "smartQuotes",
+  "hudCompact",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1225,6 +1237,28 @@ function applyDoubleSpacePeriod(text) {
 }
 
 /**
+ * Smart typography: straight quotes → curly; -- → em dash; ... → ellipsis.
+ */
+function applySmartQuotes(text) {
+  let out = String(text || "");
+  if (!out || cfg?.smartQuotes === false) return out;
+  // Em dash and ellipsis first
+  out = out.replace(/---/g, "—").replace(/--/g, "—");
+  out = out.replace(/\.\.\./g, "…");
+  // Double quotes: alternating open/close per paragraph
+  out = out.replace(/(^|[\s(\[{])"([^"]*)"/g, "$1\u201C$2\u201D");
+  // Remaining lone opening " before a word
+  out = out.replace(/(^|[\s(\[{])"/g, "$1\u201C");
+  out = out.replace(/"/g, "\u201D");
+  // Single quotes / apostrophes: contractions keep ’, paired ‘ ’
+  out = out.replace(/(\w)'(\w)/g, "$1\u2019$2");
+  out = out.replace(/(^|[\s(\[{])'([^']*)'/g, "$1\u2018$2\u2019");
+  out = out.replace(/(^|[\s(\[{])'/g, "$1\u2018");
+  out = out.replace(/'/g, "\u2019");
+  return out;
+}
+
+/**
  * Offline cleanup → polish → replacements → case mode.
  * Spoken punctuation + filler strip run first so polish sees clean structure.
  */
@@ -1233,6 +1267,7 @@ async function finalizeTranscript(text) {
   if (!out) return "";
   out = applyDoubleSpacePeriod(out);
   out = applySpokenPunctuation(out);
+  out = applySmartQuotes(out);
   out = applyStripFillers(out);
   out = await polishText(out);
   out = applyReplacements(out);
@@ -1808,11 +1843,17 @@ function broadcastStatus(extra = {}) {
   }
 }
 
+function hudSize() {
+  if (cfg?.hudCompact) return { width: 280, height: 64 };
+  return { width: 360, height: 120 };
+}
+
 function ensureHud() {
   if (hudWin && !hudWin.isDestroyed()) return hudWin;
+  const { width, height } = hudSize();
   hudWin = new BrowserWindow({
-    width: 360,
-    height: 120,
+    width,
+    height,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -1832,8 +1873,36 @@ function ensureHud() {
   return hudWin;
 }
 
+function applyHudSize() {
+  if (!hudWin || hudWin.isDestroyed()) return;
+  const { width, height } = hudSize();
+  try {
+    hudWin.setSize(width, height);
+  } catch {
+    /* ignore */
+  }
+  hudWin.webContents.send("dictate-control", {
+    action: "style",
+    hudCompact: !!cfg?.hudCompact,
+  });
+}
+
+function setHudCompact(on) {
+  cfg = { ...cfg, hudCompact: !!on };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  applyHudSize();
+  rebuildTrayMenu();
+  notify(cfg.hudCompact ? "Compact HUD on" : "Compact HUD off", { force: true });
+  return { ok: true, hudCompact: cfg.hudCompact };
+}
+
 function showHud() {
   const w = ensureHud();
+  applyHudSize();
   w.showInactive();
   w.setAlwaysOnTop(true, "screen-saver");
 }
@@ -1856,6 +1925,7 @@ async function startListening() {
       soundCues: cfg.soundCues !== false,
       silenceTimeoutMs: silenceTimeoutMsClamped(),
       maxDictationMs: maxDictationMsClamped(),
+      hudCompact: !!cfg.hudCompact,
     });
   }
   // Also open settings window if never opened so user can save license first session
@@ -2060,6 +2130,30 @@ function rebuildTrayMenu() {
           click: () => setCaseMode("title"),
         },
       ],
+    },
+    {
+      label: cfg?.hudCompact ? "HUD: compact ✓" : "HUD: compact",
+      type: "checkbox",
+      checked: !!cfg?.hudCompact,
+      click: (item) => setHudCompact(!!item.checked),
+    },
+    {
+      label: cfg?.smartQuotes !== false ? "Smart quotes ✓" : "Smart quotes",
+      type: "checkbox",
+      checked: cfg?.smartQuotes !== false,
+      click: (item) => {
+        cfg = { ...cfg, smartQuotes: !!item.checked };
+        try {
+          saveConfig(cfg);
+        } catch {
+          /* ignore */
+        }
+        rebuildTrayMenu();
+        notify(
+          cfg.smartQuotes ? "Smart quotes on" : "Smart quotes off",
+          { force: true }
+        );
+      },
     },
     {
       label: "Export settings…",
@@ -2270,6 +2364,7 @@ app.whenReady().then(() => {
   ipcMain.handle("export-history", () => exportHistory());
   ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
   ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
+  ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
   ipcMain.handle("clear-history", () => {
     cfg = { ...cfg, history: [] };
     lastTranscript = "";
