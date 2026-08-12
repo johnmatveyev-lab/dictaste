@@ -83,7 +83,7 @@ Details: [docs/INSTALL_MAC.md](./docs/INSTALL_MAC.md)
 
 ### Option A — Preview zip
 
-- [Dictaste-Setup-0.1.22.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.22.zip) · cancel dictation · paste last · spoken punctuation · strip fillers · pause hotkeys · export settings · highlight-to-speak  
+- [Dictaste-Setup-0.1.23.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.23.zip) · silence auto-stop · paste delay · cancel · paste last · spoken punctuation · strip fillers · pause hotkeys · export settings · highlight-to-speak  
 - Or [Releases](https://github.com/johnmatveyev-lab/dictaste/releases/tag/v0.1.4) / [download page](https://dictaste.vercel.app/download)  
 - Unzip → run **Dictaste.exe** (SmartScreen may warn) → tray → Settings → paste license  
 

@@ -22,6 +22,7 @@
  * - Pause hotkeys (tray) + export/import settings
  * - Spoken punctuation + strip fillers (offline cleanup)
  * - Cancel/discard dictation + paste last transcript hotkey
+ * - Silence auto-stop + configurable paste delay
  */
 const {
   app,
@@ -64,6 +65,16 @@ function defaultConfig() {
      * "" | " " | "\\n" | ". " (period+space)
      */
     pasteSuffix: " ",
+    /**
+     * Delay before SendKeys Ctrl+V (ms). Helps slow apps focus.
+     * Clamped 0–1000 in pasteText.
+     */
+    pasteDelayMs: 80,
+    /**
+     * Auto-stop dictation after this many ms of silence (no new speech results).
+     * 0 = off (manual stop only). Typical 3000–5000.
+     */
+    silenceTimeoutMs: 4000,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -284,6 +295,8 @@ const SETTINGS_EXPORT_KEYS = [
   "polish",
   "autoPaste",
   "pasteSuffix",
+  "pasteDelayMs",
+  "silenceTimeoutMs",
   "sttMode",
   "sttLang",
   "whisperBin",
@@ -1456,16 +1469,29 @@ function applyPasteSuffix(text) {
   return t + String(suf);
 }
 
+function pasteDelayMsClamped() {
+  const n = Number(cfg?.pasteDelayMs);
+  if (!Number.isFinite(n)) return 80;
+  return Math.max(0, Math.min(1000, Math.round(n)));
+}
+
+function silenceTimeoutMsClamped() {
+  const n = Number(cfg?.silenceTimeoutMs);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(0, Math.min(30000, Math.round(n)));
+}
+
 function pasteText(text) {
   if (!text) return;
   const payload = applyPasteSuffix(text);
   const prev = clipboard.readText();
   clipboard.writeText(payload);
+  const delay = pasteDelayMsClamped();
   // Windows: SendKeys Ctrl+V into focused window
   exec(
-    `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 80; [System.Windows.Forms.SendKeys]::SendWait('^v')"`,
+    `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds ${delay}; [System.Windows.Forms.SendKeys]::SendWait('^v')"`,
     () => {
-      setTimeout(() => clipboard.writeText(prev), 500);
+      setTimeout(() => clipboard.writeText(prev), 500 + delay);
     }
   );
 }
@@ -1610,6 +1636,7 @@ async function startListening() {
       sttMode: cfg.sttMode || "webspeech",
       sttLang: cfg.sttLang || "en-US",
       soundCues: cfg.soundCues !== false,
+      silenceTimeoutMs: silenceTimeoutMsClamped(),
     });
   }
   // Also open settings window if never opened so user can save license first session

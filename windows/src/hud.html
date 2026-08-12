@@ -57,6 +57,9 @@
     let mediaChunks = [];
     let mediaStream = null;
     let audioCtx = null;
+    let silenceTimer = null;
+    let silenceTimeoutMs = 0;
+    let sessionActive = false;
 
     /** Soft start/stop cue (optional). */
     function playCue(kind) {
@@ -82,6 +85,24 @@
       document.getElementById('dot').className = 'dot' + (listening ? '' : ' idle');
       document.getElementById('title').textContent = listening ? 'Listening…' : 'Dictaste';
       document.getElementById('sub').textContent = msg || (listening ? 'Speak now · hotkey to stop' : 'Ctrl+Shift+Space to dictate');
+    }
+
+    function clearSilenceTimer() {
+      if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+      }
+    }
+
+    function armSilenceTimer() {
+      clearSilenceTimer();
+      if (!sessionActive || !silenceTimeoutMs || silenceTimeoutMs <= 0) return;
+      silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        if (!sessionActive) return;
+        document.getElementById('sub').textContent = 'Silence · stopping…';
+        stop();
+      }, silenceTimeoutMs);
     }
 
     async function startMedia() {
@@ -130,15 +151,24 @@
       const sttLang = (lang || 'en-US').trim() || 'en-US';
       finals = [];
       interim = '';
+      sessionActive = true;
+      clearSilenceTimer();
       document.getElementById('partial').textContent = '';
 
       // Always try MediaRecorder when using openai / whisper-cli
       if (sttMode === 'openai' || sttMode === 'whisper-cli') {
         try {
           await startMedia();
-          setUI(true, sttMode === 'openai' ? 'Whisper (OpenAI)…' : 'Whisper CLI…');
+          setUI(
+            true,
+            (sttMode === 'openai' ? 'Whisper (OpenAI)…' : 'Whisper CLI…') +
+              (silenceTimeoutMs ? ' · auto-stop ' + Math.round(silenceTimeoutMs / 1000) + 's' : '')
+          );
+          // No speech events — arm a longer fallback so user can speak then auto-stop
+          armSilenceTimer();
           return;
         } catch (err) {
+          sessionActive = false;
           setUI(false, 'Mic denied: ' + (err.message || err));
           window.dictaste.sessionComplete({ text: '' });
           return;
@@ -151,8 +181,10 @@
           await startMedia();
           setUI(true, 'Recording (no Web Speech)…');
           sttMode = 'openai'; // will fail without key; settings hint covers it
+          armSilenceTimer();
           return;
         } catch (err) {
+          sessionActive = false;
           setUI(false, 'Speech API unavailable — open Settings');
           window.dictaste.sessionComplete({ text: '' });
           return;
@@ -172,19 +204,31 @@
             else interim += t;
           }
           document.getElementById('partial').textContent = (finals.join(' ') + ' ' + interim).trim();
+          armSilenceTimer();
         };
         rec.onerror = (e) => {
           document.getElementById('sub').textContent = 'Mic: ' + (e.error || 'error');
         };
         rec.start();
-        setUI(true, 'Web Speech · ' + sttLang);
+        const auto =
+          silenceTimeoutMs > 0
+            ? ' · silence ' + Math.round(silenceTimeoutMs / 1000) + 's'
+            : '';
+        setUI(true, 'Web Speech · ' + sttLang + auto);
+        // Don't start silence clock until first speech — only arm after results
       } catch (err) {
+        sessionActive = false;
         setUI(false, String(err.message || err));
         window.dictaste.sessionComplete({ text: '' });
       }
     }
 
     async function stop() {
+      if (!sessionActive && !rec && !mediaRecorder) {
+        // already stopping / idle
+      }
+      sessionActive = false;
+      clearSilenceTimer();
       setUI(false, 'Processing…');
       try { if (rec) rec.stop(); } catch (_) {}
       await new Promise((r) => setTimeout(r, 280));
@@ -213,6 +257,8 @@
 
     /** Discard in-progress capture — no polish/paste. */
     async function cancel() {
+      sessionActive = false;
+      clearSilenceTimer();
       setUI(false, 'Canceled');
       try { if (rec) rec.abort(); } catch (_) {
         try { if (rec) rec.stop(); } catch (_) {}
@@ -234,6 +280,7 @@
 
     window.dictaste.onDictateControl((msg) => {
       if (msg.action === 'start') {
+        silenceTimeoutMs = Math.max(0, Number(msg.silenceTimeoutMs) || 0);
         if (msg.soundCues !== false) playCue('start');
         start(msg.sttMode, msg.sttLang);
       }
