@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.36</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.37</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Append to last · continuous dictation · tray toggles.
+    Dictate · highlight-to-speak · polish selection. Append joiner · HUD mode chips · continuous.
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -74,7 +74,14 @@
     <label><input type="checkbox" id="persistPauseHotkeys" checked /> Remember pause hotkeys across restarts</label>
     <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
     <label><input type="checkbox" id="continuousDictation" /> Continuous dictation (auto-restart after each paste)</label>
-    <label><input type="checkbox" id="appendDictation" /> Append dictation to last transcript (space-join before paste)</label>
+    <label><input type="checkbox" id="appendDictation" /> Append dictation to last transcript</label>
+    <label>Append joiner
+      <select id="appendJoiner" style="margin-left:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--fg);padding:6px 8px;font:inherit;">
+        <option value="space">Space</option>
+        <option value="newline">New line</option>
+        <option value="paragraph">Paragraph (blank line)</option>
+      </select>
+    </label>
     <label><input type="checkbox" id="autoCapitalize" checked /> Auto-capitalize sentence starts</label>
     <label><input type="checkbox" id="spokenPunctuation" checked /> Spoken punctuation (period, comma, new line…)</label>
     <label><input type="checkbox" id="stripFillers" checked /> Strip fillers (um, uh, you know…)</label>
@@ -239,7 +246,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Append to last · continuous dictation · tray quick toggles · sticky HUD · tray speech rate · re-polish last · copy diagnostics · live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Append joiner · HUD mode chips · append to last · continuous · tray quick toggles · sticky HUD · tray speech rate · re-polish last · copy diagnostics · live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -310,6 +317,7 @@
       document.getElementById('soundCues').checked = c.soundCues !== false;
       document.getElementById('continuousDictation').checked = !!c.continuousDictation;
       document.getElementById('appendDictation').checked = !!c.appendDictation;
+      document.getElementById('appendJoiner').value = c.appendJoiner || 'space';
       document.getElementById('autoCapitalize').checked = c.autoCapitalize !== false;
       document.getElementById('spokenPunctuation').checked = c.spokenPunctuation !== false;
       document.getElementById('stripFillers').checked = c.stripFillers !== false;
@@ -478,6 +486,7 @@
         soundCues: document.getElementById('soundCues').checked,
         continuousDictation: document.getElementById('continuousDictation').checked,
         appendDictation: document.getElementById('appendDictation').checked,
+        appendJoiner: document.getElementById('appendJoiner').value || 'space',
         autoCapitalize: document.getElementById('autoCapitalize').checked,
         spokenPunctuation: document.getElementById('spokenPunctuation').checked,
         stripFillers: document.getElementById('stripFillers').checked,

@@ -408,6 +408,10 @@ if (/setConfigFlag|Quiet notifications/.test(main)) pass("main tray quick toggle
 else fail("main missing tray quick toggles");
 if (/appendDictation|Append to last/.test(main)) pass("main append dictation");
 else fail("main missing append dictation");
+if (/appendJoiner|setAppendJoiner/.test(main)) pass("main append joiner");
+else fail("main missing append joiner");
+if (/modeSuffix|appendDictation/.test(hud)) pass("hud mode chips");
+else fail("hud missing mode chips");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

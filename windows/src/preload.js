@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   resetHudPosition: () => ipcRenderer.invoke("reset-hud-position"),
   setTtsRate: (rate) => ipcRenderer.invoke("set-tts-rate", rate),
   setConfigFlag: (key, on) => ipcRenderer.invoke("set-config-flag", key, on),
+  setAppendJoiner: (mode) => ipcRenderer.invoke("set-append-joiner", mode),
   getHistory: () => ipcRenderer.invoke("get-history"),
   exportHistory: () => ipcRenderer.invoke("export-history"),
   importHistory: () => ipcRenderer.invoke("import-history"),

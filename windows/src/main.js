@@ -1,6 +1,6 @@
 /**
  * Dictaste Windows MVP
- * - Append dictation to last · continuous dictation · tray quick toggles
+ * - Append joiner (space/newline/paragraph) · HUD mode chips · append/continuous
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -133,6 +133,11 @@ function defaultConfig() {
      * (space-separated) before paste — great with continuous mode for long notes.
      */
     appendDictation: false,
+    /**
+     * How to join when appendDictation is on:
+     * space | newline | paragraph (blank line)
+     */
+    appendJoiner: "space",
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -446,6 +451,7 @@ const SETTINGS_EXPORT_KEYS = [
   "minWordsForRead",
   "continuousDictation",
   "appendDictation",
+  "appendJoiner",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1400,6 +1406,36 @@ function minWordsForReadClamped() {
   return Math.min(15, Math.floor(n));
 }
 
+function appendJoinerText() {
+  const j = String(cfg?.appendJoiner || "space").toLowerCase();
+  if (j === "newline" || j === "\n" || j === "line") return "\n";
+  if (j === "paragraph" || j === "para" || j === "\n\n") return "\n\n";
+  return " ";
+}
+
+function setAppendJoiner(mode) {
+  const raw = String(mode || "space").toLowerCase();
+  const next =
+    raw === "newline" || raw === "line"
+      ? "newline"
+      : raw === "paragraph" || raw === "para"
+        ? "paragraph"
+        : "space";
+  cfg = { ...cfg, appendJoiner: next, appendDictation: true };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  setTrayLabel();
+  const label =
+    next === "newline" ? "newline" : next === "paragraph" ? "paragraph" : "space";
+  notify(`Append joiner: ${label}`, { force: true });
+  return { ok: true, appendJoiner: next };
+}
+
+
 async function polishText(text) {
   if (!cfg.polish || !text.trim()) return text;
   if (!cfg.licenseKey) return text;
@@ -2286,6 +2322,9 @@ async function startListening() {
       silenceTimeoutMs: silenceTimeoutMsClamped(),
       maxDictationMs: maxDictationMsClamped(),
       hudCompact: !!cfg.hudCompact,
+      continuousDictation: !!cfg.continuousDictation,
+      appendDictation: !!cfg.appendDictation,
+      appendJoiner: cfg.appendJoiner || "space",
     });
   }
   // Also open settings window if never opened so user can save license first session
@@ -2662,6 +2701,30 @@ function rebuildTrayMenu() {
         setConfigFlag("appendDictation", !!item.checked, "Append to last"),
     },
     {
+      label: `Append joiner · ${cfg?.appendJoiner || "space"}`,
+      enabled: !!cfg?.appendDictation,
+      submenu: [
+        {
+          label: "Space",
+          type: "radio",
+          checked: (cfg?.appendJoiner || "space") === "space",
+          click: () => setAppendJoiner("space"),
+        },
+        {
+          label: "New line",
+          type: "radio",
+          checked: cfg?.appendJoiner === "newline",
+          click: () => setAppendJoiner("newline"),
+        },
+        {
+          label: "Paragraph (blank line)",
+          type: "radio",
+          checked: cfg?.appendJoiner === "paragraph",
+          click: () => setAppendJoiner("paragraph"),
+        },
+      ],
+    },
+    {
       label: cfg?.autoPaste !== false ? "Auto-paste ✓" : "Auto-paste",
       type: "checkbox",
       checked: cfg?.autoPaste !== false,
@@ -2977,6 +3040,7 @@ app.whenReady().then(() => {
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
   ipcMain.handle("reset-hud-position", () => resetHudPosition());
   ipcMain.handle("set-tts-rate", (_e, rate) => setTtsRate(rate));
+  ipcMain.handle("set-append-joiner", (_e, mode) => setAppendJoiner(mode));
   ipcMain.handle("set-config-flag", (_e, key, on) => {
     const labels = {
       continuousDictation: "Continuous dictation",
@@ -3083,9 +3147,10 @@ app.whenReady().then(() => {
     if (cfg?.appendDictation) {
       const prev = String(lastTranscript || normalizeHistory(cfg?.history)[0] || "").trim();
       if (prev && polished) {
-        // Join with single space unless prev already ends with whitespace/newline
-        const joiner = /[\s\n]$/.test(prev) ? "" : " ";
-        polished = (prev + joiner + polished).trim();
+        const j = appendJoinerText();
+        // Avoid double separators if prev already ends with whitespace
+        const needsJoin = j === " " ? !/\s$/.test(prev) : !prev.endsWith(j);
+        polished = (prev + (needsJoin ? j : "") + polished).replace(/[ \t]+\n/g, "\n").trim();
       }
     }
     pushHistory(polished);

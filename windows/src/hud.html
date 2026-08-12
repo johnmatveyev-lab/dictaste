@@ -65,6 +65,9 @@
     let silenceTimeoutMs = 0;
     let maxDictationMs = 0;
     let sessionActive = false;
+    let continuousDictation = false;
+    let appendDictation = false;
+    let appendJoiner = 'space';
 
     /** Soft start/stop cue (optional). */
     function playCue(kind) {
@@ -96,6 +99,16 @@
       const n = countWords(text);
       if (n <= 0) return base;
       return base + ' · ' + n + ' word' + (n === 1 ? '' : 's');
+    }
+
+    function modeSuffix() {
+      const bits = [];
+      if (continuousDictation) bits.push('continuous');
+      if (appendDictation) {
+        const j = appendJoiner === 'newline' ? '↵' : appendJoiner === 'paragraph' ? '¶' : 'space';
+        bits.push('append·' + j);
+      }
+      return bits.length ? ' · ' + bits.join(' · ') : '';
     }
 
     function setUI(listening, msg) {
@@ -248,7 +261,7 @@
               : '';
           document.getElementById('sub').textContent = liveWordLabel(
             live,
-            'Web Speech · ' + sttLang + auto
+            'Web Speech · ' + sttLang + auto + modeSuffix()
           );
           armSilenceTimer();
         };
@@ -260,7 +273,7 @@
           silenceTimeoutMs > 0
             ? ' · silence ' + Math.round(silenceTimeoutMs / 1000) + 's'
             : '';
-        setUI(true, 'Web Speech · ' + sttLang + auto);
+        setUI(true, 'Web Speech · ' + sttLang + auto + modeSuffix());
         // Don't start silence clock until first speech — only arm after results
       } catch (err) {
         sessionActive = false;
@@ -338,6 +351,9 @@
       if (msg.action === 'start') {
         silenceTimeoutMs = Math.max(0, Number(msg.silenceTimeoutMs) || 0);
         maxDictationMs = Math.max(0, Number(msg.maxDictationMs) || 0);
+        continuousDictation = !!msg.continuousDictation;
+        appendDictation = !!msg.appendDictation;
+        appendJoiner = msg.appendJoiner || 'space';
         applyCompact(msg.hudCompact);
         if (msg.soundCues !== false) playCue('start');
         start(msg.sttMode, msg.sttLang);
