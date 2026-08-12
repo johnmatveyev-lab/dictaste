@@ -258,6 +258,16 @@ if (/id="pause5"|Pause 5 min/i.test(settings)) {
 } else {
   fail("settings.html missing timed pause buttons");
 }
+if (/id="historyMax"|History size/i.test(settings)) {
+  pass("settings.html has history size");
+} else {
+  fail("settings.html missing history size");
+}
+if (/pasteLastTranscript|Shift-click|click = paste/i.test(settings)) {
+  pass("settings.html has history paste");
+} else {
+  fail("settings.html missing history paste");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -311,6 +321,8 @@ if (/maxDictationMs|maxDictationMsClamped/.test(main)) pass("main max dictation"
 else fail("main missing max dictation");
 if (/persistPauseHotkeys|pauseResumeAt|pauseHotkeysFor|Pause 15 minutes/.test(main)) pass("main timed/persist pause");
 else fail("main missing timed/persist pause");
+if (/historyMax|historyMaxClamped|Paste into focused app/.test(main)) pass("main paste from history");
+else fail("main missing paste from history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

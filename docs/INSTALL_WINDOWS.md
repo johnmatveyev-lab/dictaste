@@ -1,12 +1,12 @@
 # Install Dictaste on Windows
 
-## Preview zip (0.1.25 · timed pause + persist pause)
+## Preview zip (0.1.26 · paste from history)
 
-1. Download [Dictaste-Setup-0.1.25.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.25.zip) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.26.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.26.zip) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — **More info → Run anyway**).
 3. Tray → **Settings…** → paste license.
 4. Hotkeys (remappable): **Ctrl+Shift+Space** dictate · **Ctrl+Shift+R** read · **Ctrl+Shift+P** polish selection.
-5. Timed pause 5/15/30 min (auto-resume) · remember pause across restarts · double-space · max duration · silence auto-stop (Settings).
+5. Tray history: paste or copy any recent transcript (size 10–50). Timed pause · persist pause · double-space · max duration (Settings).
 6. **Ctrl+Shift+Escape** cancels in-progress dictation (no paste). **Ctrl+Shift+V** pastes last transcript.
 7. Tray → **Pause hotkeys** when presenting/gaming. **Export settings…** / **Import settings…** for backup.
 

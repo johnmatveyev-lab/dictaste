@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.25</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.26</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Pause hotkeys for 5/15/30 minutes (auto-resume) or until you resume — optionally remembered across restarts.
-    Double-space period · max duration · silence auto-stop. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Tray history: paste or copy any recent transcript. Keep up to 50 entries.
+    Timed pause · persist pause · double-space period · max duration. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -173,7 +173,10 @@
   <label>Manual transcript (optional)</label>
   <textarea id="text" placeholder="Type or paste text to polish without mic…"></textarea>
 
-  <label>Recent transcripts (last 10 · click to copy)</label>
+  <label>History size <span id="historyMaxVal" style="color:var(--lime)">25</span> (10–50 · tray paste/copy each)</label>
+  <input id="historyMax" type="range" min="10" max="50" step="5" value="25" style="width:100%;accent-color:var(--lime);" />
+
+  <label>Recent transcripts (click = paste · Shift-click = copy)</label>
   <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
     Dictate once to build history.
   </div>
@@ -210,7 +213,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Timed pause (5/15/30 min auto-resume) · remember pause across restarts · double-space period · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Paste from history (tray + Settings) · history size 10–50 · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -304,6 +307,11 @@
         document.getElementById('pasteDelayVal').textContent = String(ms);
       }
       {
+        const hm = Math.max(10, Math.min(50, Number(c.historyMax) || 25));
+        document.getElementById('historyMax').value = String(hm);
+        document.getElementById('historyMaxVal').textContent = String(hm);
+      }
+      {
         const sec = Math.max(0, Math.min(180, Math.round((Number(c.maxDictationMs) || 0) / 1000)));
         document.getElementById('maxDictation').value = String(sec);
         document.getElementById('maxDictVal').textContent = sec === 0 ? 'off' : sec + 's';
@@ -384,10 +392,17 @@
         row.style.cssText =
           'display:block;width:100%;text-align:left;margin:0 0 6px;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;';
         row.textContent = (i + 1) + '. ' + (t.length > 140 ? t.slice(0, 137) + '…' : t);
-        row.onclick = async () => {
-          await window.dictaste.copyLastTranscript(i);
-          document.getElementById('status').textContent = 'Copied transcript #' + (i + 1);
+        row.onclick = async (ev) => {
           document.getElementById('text').value = t;
+          if (ev.shiftKey) {
+            await window.dictaste.copyLastTranscript(i);
+            document.getElementById('status').textContent = 'Copied transcript #' + (i + 1);
+          } else {
+            const r = await window.dictaste.pasteLastTranscript(i);
+            document.getElementById('status').textContent = r?.ok
+              ? (r.deliver === 'clipboard' ? 'On clipboard · transcript #' + (i + 1) : 'Pasted transcript #' + (i + 1))
+              : (r?.error || 'Paste failed');
+          }
         };
         el.appendChild(row);
       });
@@ -422,6 +437,7 @@
         maxDictationMs:
           Math.max(0, Math.min(180, Number(document.getElementById('maxDictation').value) || 0)) *
           1000,
+        historyMax: Math.max(10, Math.min(50, Number(document.getElementById('historyMax').value) || 25)),
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         hotkeyPolish: document.getElementById('hotkeyPolish').value.trim() || 'Ctrl+Shift+P',
@@ -496,6 +512,9 @@
     document.getElementById('maxDictation').oninput = () => {
       const sec = Number(document.getElementById('maxDictation').value) || 0;
       document.getElementById('maxDictVal').textContent = sec === 0 ? 'off' : sec + 's';
+    };
+    document.getElementById('historyMax').oninput = () => {
+      document.getElementById('historyMaxVal').textContent = document.getElementById('historyMax').value;
     };
     document.getElementById('refreshVoices').onclick = async () => {
       document.getElementById('status').textContent = 'Loading SAPI voices…';

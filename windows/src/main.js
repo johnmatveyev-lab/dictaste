@@ -25,6 +25,7 @@
  * - Silence auto-stop + configurable paste delay
  * - Double-space → period + max dictation duration safety
  * - Persist pause hotkeys + timed pause (5/15/30 min auto-resume)
+ * - Paste from history (tray) + deeper history (up to 50)
  */
 const {
   app,
@@ -151,7 +152,11 @@ function defaultConfig() {
     hotkeyCancel: "CommandOrControl+Shift+Escape",
     /** Re-paste last polished transcript into focused app */
     hotkeyPasteLast: "CommandOrControl+Shift+V",
-    /** Last polished dictations (newest first, max 10) */
+    /**
+     * How many recent transcripts to keep (10–50). Default 25.
+     */
+    historyMax: 25,
+    /** Last polished dictations (newest first) */
     history: [],
   };
 }
@@ -402,6 +407,7 @@ const SETTINGS_EXPORT_KEYS = [
   "hotkeyPolish",
   "hotkeyCancel",
   "hotkeyPasteLast",
+  "historyMax",
 ];
 
 function exportSettings({ includeSecrets = false } = {}) {
@@ -1265,20 +1271,28 @@ function listSapiVoices() {
   });
 }
 
+function historyMaxClamped() {
+  const n = Number(cfg?.historyMax);
+  if (!Number.isFinite(n)) return 25;
+  return Math.max(10, Math.min(50, Math.round(n)));
+}
+
 function normalizeHistory(list) {
   if (!Array.isArray(list)) return [];
+  const max = historyMaxClamped();
   return list
     .map((s) => String(s || "").trim())
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, max);
 }
 
 function pushHistory(text) {
   const t = String(text || "").trim();
   if (!t) return;
   lastTranscript = t;
+  const max = historyMaxClamped();
   const prev = normalizeHistory(cfg?.history);
-  const next = [t, ...prev.filter((x) => x !== t)].slice(0, 10);
+  const next = [t, ...prev.filter((x) => x !== t)].slice(0, max);
   cfg = { ...cfg, history: next };
   try {
     saveConfig(cfg);
@@ -1920,7 +1934,7 @@ function rebuildTrayMenu() {
       click: () => exportSettings({ includeSecrets: false }),
     },
     {
-      label: "Recent transcripts",
+      label: `Recent transcripts (${normalizeHistory(cfg?.history).length}/${historyMaxClamped()})`,
       enabled: normalizeHistory(cfg?.history).length > 0,
       submenu: (() => {
         const hist = normalizeHistory(cfg?.history);
@@ -1929,10 +1943,25 @@ function rebuildTrayMenu() {
         }
         return [
           ...hist.map((t, i) => ({
-            label: (t.length > 48 ? t.slice(0, 45) + "…" : t).replace(/\s+/g, " "),
-            click: () => copyLastTranscript(i),
+            label: (t.length > 42 ? t.slice(0, 39) + "…" : t).replace(/\s+/g, " "),
+            submenu: [
+              {
+                label: "Paste into focused app",
+                enabled: !hotkeysPaused,
+                click: () => pasteLastTranscript(i),
+              },
+              {
+                label: "Copy to clipboard",
+                click: () => copyLastTranscript(i),
+              },
+            ],
           })),
           { type: "separator" },
+          {
+            label: "Paste latest",
+            enabled: !hotkeysPaused,
+            click: () => pasteLastTranscript(0),
+          },
           {
             label: "Export history…",
             click: () => exportHistory(),
