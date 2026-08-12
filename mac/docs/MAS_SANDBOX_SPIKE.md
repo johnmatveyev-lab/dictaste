@@ -1,8 +1,10 @@
 # Mac App Store App Sandbox spike (Path C)
 
-**Product:** Dictaste 0.1.4 · **Team:** L85AF3V872 · **Bundle ID:** `com.johnmatveyev.flowdictate`  
+**Product:** Dictaste 0.1.4 · **Team:** L85AF3V872  
+**Bundle ID (locked):** `com.johnmatveyev.flowdictate` — kept for TCC continuity; **no rename** in this spike or follow-ups unless Architect/John explicitly reopen that decision.  
 **Track:** notarized DMG (Developer ID) **and** Mac App Store **in parallel**.  
-**Scope of this spike:** static analysis + MAS build skeleton. Live Mac GUI validation still required.
+**Scope of this spike:** static analysis + MAS sandbox entitlements / export skeleton / privacy manifest only. Live Mac GUI validation still required.  
+**Explicitly out of scope:** StoreKit, App Store Connect billing, and any Stripe vs StoreKit vs free-on-MAS product decision (John’s call later).
 
 ## Verdict (core dictation)
 
@@ -146,7 +148,7 @@ If PostEvent fails: clipboard-only fallback already exists in `TextInserter` (�
 1. Gate `HotkeyMonitor` on `CGPreflightListenEventAccess` for sandboxed builds; keep AX gate for DMG if desired.  
 2. Request PostEvent explicitly before first insert; surface Settings deep link.  
 3. `#if` / runtime `AppSandbox.isEnabled` feature flags: hide Flow Read / AX onboarding on MAS.  
-4. Do **not** change bundle ID unless TCC continuity proves broken across tracks.
+4. Keep bundle ID `com.johnmatveyev.flowdictate` on both tracks (TCC continuity). Do not propose or implement a rename here.
 
 ---
 
@@ -156,4 +158,7 @@ If PostEvent fails: clipboard-only fallback already exists in `TextInserter` (�
 - No mirror archive  
 - No replacement of DMG entitlements or notarize scripts  
 - No Apple secrets required to merge  
-- No claim of live Mac GUI proof (static analysis only in CI)
+- No claim of live Mac GUI proof (static analysis only in CI)  
+- No StoreKit / ASC IAP / subscription wiring  
+- No billing-path recommendation (Stripe vs StoreKit vs free-on-MAS)  
+- No bundle ID rename
