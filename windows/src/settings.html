@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.26</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.27</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Tray history: paste or copy any recent transcript. Keep up to 50 entries.
-    Timed pause · persist pause · double-space period · max duration. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Switch dictation language from the tray. Case modes: sentence / lower / UPPER / Title.
+    Paste from history · timed pause · double-space period. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -106,7 +106,7 @@
     <option value="whisper-cli">Offline whisper.cpp CLI (path below)</option>
   </select>
 
-  <label>Dictation language (Web Speech · Whisper)</label>
+  <label>Dictation language (Web Speech · Whisper · also tray menu)</label>
   <select id="sttLang" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value="en-US">English (US)</option>
     <option value="en-GB">English (UK)</option>
@@ -128,6 +128,14 @@
     <option value="zh-TW">Chinese (Traditional)</option>
     <option value="hi-IN">Hindi</option>
     <option value="ar-SA">Arabic</option>
+  </select>
+
+  <label>Case mode (after polish)</label>
+  <select id="caseMode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="sentence">Sentence case (auto-capitalize)</option>
+    <option value="lower">lower case</option>
+    <option value="upper">UPPER CASE</option>
+    <option value="title">Title Case</option>
   </select>
 
   <label>Highlight-to-speak engine</label>
@@ -213,7 +221,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Paste from history (tray + Settings) · history size 10–50 · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Tray language switcher · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -328,6 +336,7 @@
         c.hotkeyPasteLastDisplay || c.hotkeyPasteLast || 'Ctrl+Shift+V';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('sttLang').value = c.sttLang || 'en-US';
+      document.getElementById('caseMode').value = c.caseMode || 'sentence';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
       const rate = Math.max(-10, Math.min(10, Number(c.ttsRate) || 0));
       document.getElementById('ttsRate').value = String(rate);
@@ -346,7 +355,13 @@
         else if (s.phase === 'reading' || s.reading) document.getElementById('status').textContent = 'Reading selection…';
         else if (s.listening) document.getElementById('status').textContent = 'Listening…';
         else if (s.error) document.getElementById('status').textContent = s.error;
-        else if (s.last) {
+        else if (s.sttLang) {
+          document.getElementById('sttLang').value = s.sttLang;
+          document.getElementById('status').textContent = 'Language · ' + s.sttLang;
+        } else if (s.caseMode) {
+          document.getElementById('caseMode').value = s.caseMode;
+          document.getElementById('status').textContent = 'Case · ' + s.caseMode;
+        } else if (s.last) {
           document.getElementById('status').textContent = 'Done';
           document.getElementById('text').value = s.last;
           renderHistory().catch(() => {});
@@ -445,6 +460,7 @@
         hotkeyPasteLast: document.getElementById('hotkeyPasteLast').value.trim() || 'Ctrl+Shift+V',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         sttLang: document.getElementById('sttLang').value || 'en-US',
+        caseMode: document.getElementById('caseMode').value || 'sentence',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
         ttsRate: Math.max(-10, Math.min(10, Number(document.getElementById('ttsRate').value) || 0)),
         ttsSapiVoice: document.getElementById('ttsSapiVoice').value || '',

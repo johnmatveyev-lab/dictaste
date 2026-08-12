@@ -26,6 +26,7 @@
  * - Double-space → period + max dictation duration safety
  * - Persist pause hotkeys + timed pause (5/15/30 min auto-resume)
  * - Paste from history (tray) + deeper history (up to 50)
+ * - Tray language switcher + case modes (sentence/lower/upper/title)
  */
 const {
   app,
@@ -92,6 +93,12 @@ function defaultConfig() {
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
     sttLang: "en-US",
+    /**
+     * Case transform after polish/replacements:
+     * sentence = auto-capitalize (respects autoCapitalize flag)
+     * lower | upper | title = force transform
+     */
+    caseMode: "sentence",
     openAIKey: "",
     /** Absolute path to whisper.cpp `whisper-cli` or `main` binary (optional offline) */
     whisperBin: "",
@@ -388,6 +395,7 @@ const SETTINGS_EXPORT_KEYS = [
   "doubleSpacePeriod",
   "sttMode",
   "sttLang",
+  "caseMode",
   "whisperBin",
   "whisperModel",
   "ttsRate",
@@ -1061,6 +1069,91 @@ function applyAutoCapitalize(text) {
   return t.replace(/(^|[.!?…]\s+)([a-zà-öø-ÿ])/g, (_, p, c) => p + c.toUpperCase());
 }
 
+const STT_LANG_LABELS = {
+  "en-US": "English (US)",
+  "en-GB": "English (UK)",
+  "en-AU": "English (AU)",
+  "es-ES": "Spanish (ES)",
+  "es-MX": "Spanish (MX)",
+  "fr-FR": "French",
+  "de-DE": "German",
+  "pt-BR": "Portuguese (BR)",
+  "pt-PT": "Portuguese (PT)",
+  "it-IT": "Italian",
+  "nl-NL": "Dutch",
+  "pl-PL": "Polish",
+  "uk-UA": "Ukrainian",
+  "ru-RU": "Russian",
+  "ja-JP": "Japanese",
+  "ko-KR": "Korean",
+  "zh-CN": "Chinese (CN)",
+  "zh-TW": "Chinese (TW)",
+  "hi-IN": "Hindi",
+  "ar-SA": "Arabic",
+};
+
+function setSttLang(lang) {
+  const next = String(lang || "en-US").trim() || "en-US";
+  cfg = { ...cfg, sttLang: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  setTrayLabel();
+  notify(`Dictation language · ${STT_LANG_LABELS[next] || next}`, { force: true });
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send("status", {
+      phase: "idle",
+      sttLang: next,
+      configHint: true,
+    });
+  }
+  return { ok: true, sttLang: next };
+}
+
+function setCaseMode(mode) {
+  const allowed = new Set(["sentence", "lower", "upper", "title"]);
+  const next = allowed.has(String(mode || "").toLowerCase())
+    ? String(mode).toLowerCase()
+    : "sentence";
+  cfg = { ...cfg, caseMode: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  notify(`Case mode · ${next}`, { force: true });
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send("status", {
+      phase: "idle",
+      caseMode: next,
+      configHint: true,
+    });
+  }
+  return { ok: true, caseMode: next };
+}
+
+/**
+ * Case transform: sentence (auto-cap) | lower | upper | title
+ */
+function applyCaseMode(text) {
+  const t = String(text || "");
+  if (!t) return t;
+  const mode = String(cfg?.caseMode || "sentence").toLowerCase();
+  if (mode === "lower") return t.toLocaleLowerCase();
+  if (mode === "upper") return t.toLocaleUpperCase();
+  if (mode === "title") {
+    return t
+      .toLocaleLowerCase()
+      .replace(/(^|[\s\-_/([{"'])(\p{L})/gu, (_, p, c) => p + c.toUpperCase());
+  }
+  // sentence (default): use autoCapitalize flag
+  return applyAutoCapitalize(t);
+}
+
 /**
  * Strip common English fillers (um, uh, er, ah, hmm, you know, like as filler).
  * Conservative: only standalone tokens, not mid-word.
@@ -1132,7 +1225,7 @@ function applyDoubleSpacePeriod(text) {
 }
 
 /**
- * Offline cleanup → polish → replacements → auto-capitalize.
+ * Offline cleanup → polish → replacements → case mode.
  * Spoken punctuation + filler strip run first so polish sees clean structure.
  */
 async function finalizeTranscript(text) {
@@ -1143,7 +1236,7 @@ async function finalizeTranscript(text) {
   out = applyStripFillers(out);
   out = await polishText(out);
   out = applyReplacements(out);
-  out = applyAutoCapitalize(out);
+  out = applyCaseMode(out);
   return out.trim();
 }
 
@@ -1688,6 +1781,7 @@ function setTrayLabel() {
   if (!tray) return;
   const d = toDisplayHotkey(hotkeyDictateAccel());
   const r = toDisplayHotkey(hotkeyReadAccel());
+  const lang = STT_LANG_LABELS[cfg?.sttLang] || cfg?.sttLang || "en-US";
   if (hotkeysPaused) {
     if (pauseResumeAt > Date.now()) {
       const mins = Math.max(1, Math.ceil((pauseResumeAt - Date.now()) / 60_000));
@@ -1696,11 +1790,11 @@ function setTrayLabel() {
       tray.setToolTip("Dictaste — hotkeys paused");
     }
   } else if (listening) {
-    tray.setToolTip(`Dictaste — listening (${d} to stop)`);
+    tray.setToolTip(`Dictaste — listening · ${lang} (${d} to stop)`);
   } else if (reading) {
     tray.setToolTip(`Dictaste — reading (${r} to stop)`);
   } else {
-    tray.setToolTip(`Dictaste — dictate ${d} · read ${r}`);
+    tray.setToolTip(`Dictaste — dictate ${d} · ${lang}`);
   }
 }
 
@@ -1930,6 +2024,44 @@ function rebuildTrayMenu() {
       },
     },
     {
+      label: `Language · ${STT_LANG_LABELS[cfg?.sttLang] || cfg?.sttLang || "en-US"}`,
+      submenu: Object.keys(STT_LANG_LABELS).map((code) => ({
+        label: STT_LANG_LABELS[code],
+        type: "radio",
+        checked: (cfg?.sttLang || "en-US") === code,
+        click: () => setSttLang(code),
+      })),
+    },
+    {
+      label: `Case · ${String(cfg?.caseMode || "sentence")}`,
+      submenu: [
+        {
+          label: "Sentence (auto-capitalize)",
+          type: "radio",
+          checked: (cfg?.caseMode || "sentence") === "sentence",
+          click: () => setCaseMode("sentence"),
+        },
+        {
+          label: "lower case",
+          type: "radio",
+          checked: cfg?.caseMode === "lower",
+          click: () => setCaseMode("lower"),
+        },
+        {
+          label: "UPPER CASE",
+          type: "radio",
+          checked: cfg?.caseMode === "upper",
+          click: () => setCaseMode("upper"),
+        },
+        {
+          label: "Title Case",
+          type: "radio",
+          checked: cfg?.caseMode === "title",
+          click: () => setCaseMode("title"),
+        },
+      ],
+    },
+    {
       label: "Export settings…",
       click: () => exportSettings({ includeSecrets: false }),
     },
@@ -2136,6 +2268,8 @@ app.whenReady().then(() => {
   ipcMain.handle("cancel-dictation", () => cancelDictation());
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
   ipcMain.handle("export-history", () => exportHistory());
+  ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
+  ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
   ipcMain.handle("clear-history", () => {
     cfg = { ...cfg, history: [] };
     lastTranscript = "";

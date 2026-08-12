@@ -268,6 +268,11 @@ if (/pasteLastTranscript|Shift-click|click = paste/i.test(settings)) {
 } else {
   fail("settings.html missing history paste");
 }
+if (/id="caseMode"|Case mode/i.test(settings)) {
+  pass("settings.html has case mode");
+} else {
+  fail("settings.html missing case mode");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -323,6 +328,10 @@ if (/persistPauseHotkeys|pauseResumeAt|pauseHotkeysFor|Pause 15 minutes/.test(ma
 else fail("main missing timed/persist pause");
 if (/historyMax|historyMaxClamped|Paste into focused app/.test(main)) pass("main paste from history");
 else fail("main missing paste from history");
+if (/setSttLang|STT_LANG_LABELS|Language ·/.test(main)) pass("main tray language switcher");
+else fail("main missing tray language switcher");
+if (/caseMode|applyCaseMode|setCaseMode/.test(main)) pass("main case modes");
+else fail("main missing case modes");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
