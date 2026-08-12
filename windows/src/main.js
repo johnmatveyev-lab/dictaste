@@ -1,6 +1,6 @@
 /**
  * Dictaste Windows MVP
- * - Append joiner (space/newline/paragraph) · HUD mode chips · append/continuous
+ * - Undo last dictation · append joiner · HUD mode chips · continuous
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -1599,6 +1599,42 @@ function pushHistory(text) {
   rebuildTrayMenu();
 }
 
+/**
+ * Remove the newest history entry and restore lastTranscript to the prior one.
+ * Does not reverse paste into the focused app (use Ctrl+Z there).
+ */
+function undoLastDictation() {
+  const hist = normalizeHistory(cfg?.history);
+  if (!hist.length && !String(lastTranscript || "").trim()) {
+    notify("Nothing to undo", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const removed = hist[0] || lastTranscript || "";
+  const next = hist.slice(1);
+  lastTranscript = next[0] || "";
+  // If append mode had merged into removed, user still has prior segment as lastTranscript
+  cfg = { ...cfg, history: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  const preview = String(removed).trim();
+  notify(
+    preview
+      ? `Undid last dictation · ${preview.length > 48 ? preview.slice(0, 45) + "…" : preview}`
+      : "Undid last dictation",
+    { force: true }
+  );
+  return {
+    ok: true,
+    removed: preview,
+    remaining: next.length,
+    lastTranscript,
+  };
+}
+
 function copyLastTranscript(index = 0) {
   const hist = normalizeHistory(cfg?.history);
   const t = String(
@@ -2637,6 +2673,11 @@ function rebuildTrayMenu() {
       },
     },
     {
+      label: "Undo last dictation",
+      enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
+      click: () => undoLastDictation(),
+    },
+    {
       label: "Copy support diagnostics",
       click: () => copySupportDiagnostics(),
     },
@@ -2859,6 +2900,11 @@ function rebuildTrayMenu() {
             },
           },
           {
+            label: "Undo last dictation",
+            enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
+            click: () => undoLastDictation(),
+          },
+          {
             label: "Clear history",
             click: () => clearHistory(),
           },
@@ -3054,6 +3100,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("clear-history", () => clearHistory());
   ipcMain.handle("reread-last", async () => rereadLast());
+  ipcMain.handle("undo-last-dictation", () => undoLastDictation());
   ipcMain.handle("repolish-last", async (_e, index) =>
     repolishLast(Number(index) || 0)
   );

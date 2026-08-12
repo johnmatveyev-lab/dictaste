@@ -412,6 +412,8 @@ if (/appendJoiner|setAppendJoiner/.test(main)) pass("main append joiner");
 else fail("main missing append joiner");
 if (/modeSuffix|appendDictation/.test(hud)) pass("hud mode chips");
 else fail("hud missing mode chips");
+if (/undoLastDictation|Undo last dictation/.test(main)) pass("main undo last");
+else fail("main missing undo last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

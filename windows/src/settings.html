@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.37</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.38</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Append joiner · HUD mode chips · continuous.
+    Dictate · highlight-to-speak · polish selection. Undo last dictation · append joiner · HUD modes.
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -225,6 +225,7 @@
     <button id="copyLast" class="ghost">Copy last transcript</button>
     <button id="pasteLast" class="ghost">Paste last transcript</button>
     <button id="repolishLast" class="ghost">Re-polish last</button>
+    <button id="undoLast" class="ghost">Undo last dictation</button>
     <button id="copyDiag" class="ghost">Copy diagnostics</button>
     <button id="cancelDict" class="ghost">Cancel dictation</button>
     <button id="pauseHotkeys" class="ghost">Pause hotkeys</button>
@@ -246,7 +247,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Append joiner · HUD mode chips · append to last · continuous · tray quick toggles · sticky HUD · tray speech rate · re-polish last · copy diagnostics · live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Undo last dictation · append joiner · HUD mode chips · append to last · continuous · tray quick toggles · sticky HUD · tray speech rate · re-polish last · copy diagnostics · live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -756,6 +757,13 @@
         ? ('Re-polished · ' + (r.deliver || 'ok'))
         : (r?.error === 'empty' ? 'Nothing to re-polish yet' : (r?.error || 'Re-polish failed'));
       if (r?.text) document.getElementById('text').value = r.text;
+    };
+    document.getElementById('undoLast').onclick = async () => {
+      const r = await window.dictaste.undoLastDictation();
+      document.getElementById('status').textContent = r?.ok
+        ? ('Undid last · ' + (r.remaining || 0) + ' left')
+        : (r?.error === 'empty' ? 'Nothing to undo' : (r?.error || 'Undo failed'));
+      await renderHistory();
     };
     document.getElementById('copyDiag').onclick = async () => {
       const r = await window.dictaste.copySupportDiagnostics();
