@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.23</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.24</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Silence auto-stop ends dictation after a quiet pause. Paste delay helps slow apps.
-    Cancel discards (no paste). Paste last re-inserts. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Double-space becomes a period. Max duration safety-stops long sessions.
+    Silence auto-stop · paste delay · cancel · paste last. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -75,6 +75,7 @@
     <label><input type="checkbox" id="autoCapitalize" checked /> Auto-capitalize sentence starts</label>
     <label><input type="checkbox" id="spokenPunctuation" checked /> Spoken punctuation (period, comma, new line…)</label>
     <label><input type="checkbox" id="stripFillers" checked /> Strip fillers (um, uh, you know…)</label>
+    <label><input type="checkbox" id="doubleSpacePeriod" checked /> Double-space → period (iOS-style)</label>
   </div>
 
   <label>Text replacements <span style="font-weight:400;color:var(--muted)">(one per line: find=replace)</span></label>
@@ -93,6 +94,9 @@
 
   <label>Paste delay <span id="pasteDelayVal" style="color:var(--lime)">80</span> ms (slow apps)</label>
   <input id="pasteDelay" type="range" min="0" max="500" step="20" value="80" style="width:100%;accent-color:var(--lime);" />
+
+  <label>Max dictation <span id="maxDictVal" style="color:var(--lime)">90s</span> (0 = no cap · safety stop)</label>
+  <input id="maxDictation" type="range" min="0" max="180" step="15" value="90" style="width:100%;accent-color:var(--lime);" />
 
   <label>Speech-to-text engine</label>
   <select id="sttMode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
@@ -202,7 +206,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Silence auto-stop ends listening after quiet pause (0 = manual only). Paste delay cushions slow apps. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Double-space → period · max duration safety-stop · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -273,6 +277,7 @@
       document.getElementById('autoCapitalize').checked = c.autoCapitalize !== false;
       document.getElementById('spokenPunctuation').checked = c.spokenPunctuation !== false;
       document.getElementById('stripFillers').checked = c.stripFillers !== false;
+      document.getElementById('doubleSpacePeriod').checked = c.doubleSpacePeriod !== false;
       document.getElementById('replacements').value = c.replacements || '';
       {
         const suf = c.pasteSuffix;
@@ -292,6 +297,11 @@
         const ms = Math.max(0, Math.min(500, Number(c.pasteDelayMs) || 80));
         document.getElementById('pasteDelay').value = String(ms);
         document.getElementById('pasteDelayVal').textContent = String(ms);
+      }
+      {
+        const sec = Math.max(0, Math.min(180, Math.round((Number(c.maxDictationMs) || 0) / 1000)));
+        document.getElementById('maxDictation').value = String(sec);
+        document.getElementById('maxDictVal').textContent = sec === 0 ? 'off' : sec + 's';
       }
       document.getElementById('hotkeyDictate').value =
         c.hotkeyDictateDisplay || c.hotkeyDictate || 'Ctrl+Shift+Space';
@@ -388,6 +398,7 @@
         autoCapitalize: document.getElementById('autoCapitalize').checked,
         spokenPunctuation: document.getElementById('spokenPunctuation').checked,
         stripFillers: document.getElementById('stripFillers').checked,
+        doubleSpacePeriod: document.getElementById('doubleSpacePeriod').checked,
         replacements: document.getElementById('replacements').value,
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;
@@ -400,6 +411,9 @@
           0,
           Math.min(500, Number(document.getElementById('pasteDelay').value) || 80)
         ),
+        maxDictationMs:
+          Math.max(0, Math.min(180, Number(document.getElementById('maxDictation').value) || 0)) *
+          1000,
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         hotkeyPolish: document.getElementById('hotkeyPolish').value.trim() || 'Ctrl+Shift+P',
@@ -470,6 +484,10 @@
     document.getElementById('pasteDelay').oninput = () => {
       document.getElementById('pasteDelayVal').textContent =
         document.getElementById('pasteDelay').value;
+    };
+    document.getElementById('maxDictation').oninput = () => {
+      const sec = Number(document.getElementById('maxDictation').value) || 0;
+      document.getElementById('maxDictVal').textContent = sec === 0 ? 'off' : sec + 's';
     };
     document.getElementById('refreshVoices').onclick = async () => {
       document.getElementById('status').textContent = 'Loading SAPI voices…';

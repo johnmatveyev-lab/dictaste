@@ -58,7 +58,9 @@
     let mediaStream = null;
     let audioCtx = null;
     let silenceTimer = null;
+    let maxDurationTimer = null;
     let silenceTimeoutMs = 0;
+    let maxDictationMs = 0;
     let sessionActive = false;
 
     /** Soft start/stop cue (optional). */
@@ -94,6 +96,13 @@
       }
     }
 
+    function clearMaxDurationTimer() {
+      if (maxDurationTimer) {
+        clearTimeout(maxDurationTimer);
+        maxDurationTimer = null;
+      }
+    }
+
     function armSilenceTimer() {
       clearSilenceTimer();
       if (!sessionActive || !silenceTimeoutMs || silenceTimeoutMs <= 0) return;
@@ -103,6 +112,17 @@
         document.getElementById('sub').textContent = 'Silence · stopping…';
         stop();
       }, silenceTimeoutMs);
+    }
+
+    function armMaxDurationTimer() {
+      clearMaxDurationTimer();
+      if (!sessionActive || !maxDictationMs || maxDictationMs <= 0) return;
+      maxDurationTimer = setTimeout(() => {
+        maxDurationTimer = null;
+        if (!sessionActive) return;
+        document.getElementById('sub').textContent = 'Max duration · stopping…';
+        stop();
+      }, maxDictationMs);
     }
 
     async function startMedia() {
@@ -153,6 +173,8 @@
       interim = '';
       sessionActive = true;
       clearSilenceTimer();
+      clearMaxDurationTimer();
+      armMaxDurationTimer();
       document.getElementById('partial').textContent = '';
 
       // Always try MediaRecorder when using openai / whisper-cli
@@ -229,6 +251,7 @@
       }
       sessionActive = false;
       clearSilenceTimer();
+      clearMaxDurationTimer();
       setUI(false, 'Processing…');
       try { if (rec) rec.stop(); } catch (_) {}
       await new Promise((r) => setTimeout(r, 280));
@@ -259,6 +282,7 @@
     async function cancel() {
       sessionActive = false;
       clearSilenceTimer();
+      clearMaxDurationTimer();
       setUI(false, 'Canceled');
       try { if (rec) rec.abort(); } catch (_) {
         try { if (rec) rec.stop(); } catch (_) {}
@@ -281,6 +305,7 @@
     window.dictaste.onDictateControl((msg) => {
       if (msg.action === 'start') {
         silenceTimeoutMs = Math.max(0, Number(msg.silenceTimeoutMs) || 0);
+        maxDictationMs = Math.max(0, Number(msg.maxDictationMs) || 0);
         if (msg.soundCues !== false) playCue('start');
         start(msg.sttMode, msg.sttLang);
       }

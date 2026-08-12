@@ -238,6 +238,16 @@ if (/id="pasteDelay"|Paste delay/i.test(settings)) {
 } else {
   fail("settings.html missing paste delay");
 }
+if (/id="doubleSpacePeriod"|Double-space/i.test(settings)) {
+  pass("settings.html has double-space period");
+} else {
+  fail("settings.html missing double-space period");
+}
+if (/id="maxDictation"|Max dictation/i.test(settings)) {
+  pass("settings.html has max dictation");
+} else {
+  fail("settings.html missing max dictation");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -258,6 +268,11 @@ if (/armSilenceTimer|silenceTimeoutMs/i.test(hud)) {
   pass("hud.html has silence auto-stop");
 } else {
   fail("hud.html missing silence auto-stop");
+}
+if (/maxDictationMs|armMaxDurationTimer/i.test(hud)) {
+  pass("hud.html has max dictation duration");
+} else {
+  fail("hud.html missing max dictation duration");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);
@@ -280,6 +295,10 @@ if (/silenceTimeoutMs/.test(main)) pass("main silence auto-stop config");
 else fail("main missing silence auto-stop");
 if (/pasteDelayMs|pasteDelayMsClamped/.test(main)) pass("main paste delay");
 else fail("main missing paste delay");
+if (/doubleSpacePeriod|applyDoubleSpacePeriod/.test(main)) pass("main double-space period");
+else fail("main missing double-space period");
+if (/maxDictationMs|maxDictationMsClamped/.test(main)) pass("main max dictation");
+else fail("main missing max dictation");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

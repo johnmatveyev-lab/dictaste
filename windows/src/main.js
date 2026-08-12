@@ -23,6 +23,7 @@
  * - Spoken punctuation + strip fillers (offline cleanup)
  * - Cancel/discard dictation + paste last transcript hotkey
  * - Silence auto-stop + configurable paste delay
+ * - Double-space → period + max dictation duration safety
  */
 const {
   app,
@@ -75,6 +76,16 @@ function defaultConfig() {
      * 0 = off (manual stop only). Typical 3000–5000.
      */
     silenceTimeoutMs: 4000,
+    /**
+     * Hard cap on a single dictation session (ms). Safety stop even if speech continues.
+     * 0 = off. Default 90s.
+     */
+    maxDictationMs: 90000,
+    /**
+     * Convert double-space (or "  ") into sentence end ". " (iOS-style).
+     * Applied offline before polish; skips when already after punctuation.
+     */
+    doubleSpacePeriod: true,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -297,6 +308,8 @@ const SETTINGS_EXPORT_KEYS = [
   "pasteSuffix",
   "pasteDelayMs",
   "silenceTimeoutMs",
+  "maxDictationMs",
+  "doubleSpacePeriod",
   "sttMode",
   "sttLang",
   "whisperBin",
@@ -1028,12 +1041,26 @@ function applySpokenPunctuation(text) {
 }
 
 /**
+ * iOS-style: double space → ". " when not already ending a sentence.
+ * Runs before filler strip so spacing is normalized early.
+ */
+function applyDoubleSpacePeriod(text) {
+  let out = String(text || "");
+  if (!out || cfg?.doubleSpacePeriod === false) return out;
+  // Two or more spaces (or space+tab) after a word char → period + space
+  // Skip if already preceded by sentence terminator
+  out = out.replace(/([^\s.!?…,:;])[ \t]{2,}/g, "$1. ");
+  return out;
+}
+
+/**
  * Offline cleanup → polish → replacements → auto-capitalize.
  * Spoken punctuation + filler strip run first so polish sees clean structure.
  */
 async function finalizeTranscript(text) {
   let out = String(text || "").trim();
   if (!out) return "";
+  out = applyDoubleSpacePeriod(out);
   out = applySpokenPunctuation(out);
   out = applyStripFillers(out);
   out = await polishText(out);
@@ -1481,6 +1508,12 @@ function silenceTimeoutMsClamped() {
   return Math.max(0, Math.min(30000, Math.round(n)));
 }
 
+function maxDictationMsClamped() {
+  const n = Number(cfg?.maxDictationMs);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(0, Math.min(600000, Math.round(n)));
+}
+
 function pasteText(text) {
   if (!text) return;
   const payload = applyPasteSuffix(text);
@@ -1637,6 +1670,7 @@ async function startListening() {
       sttLang: cfg.sttLang || "en-US",
       soundCues: cfg.soundCues !== false,
       silenceTimeoutMs: silenceTimeoutMsClamped(),
+      maxDictationMs: maxDictationMsClamped(),
     });
   }
   // Also open settings window if never opened so user can save license first session
