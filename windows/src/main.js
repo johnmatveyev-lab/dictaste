@@ -18,6 +18,7 @@
  * - Optional dictation sound cues + export history
  * - Text replacements + auto-capitalize first letter
  * - Polish selection hotkey (rewrite highlighted text)
+ * - Clipboard-only mode when auto-paste is off
  */
 const {
   app,
@@ -674,12 +675,12 @@ async function polishSelection() {
       return { ok: false, error: "empty-result" };
     }
     pushHistory(polished);
-    pasteText(polished);
+    const del = deliverText(polished);
     broadcastStatus({ phase: "idle", last: polished });
-    notify(
-      polished.length > 80 ? polished.slice(0, 77) + "…" : polished
-    );
-    return { ok: true, polished };
+    if (del.mode === "paste") {
+      notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);
+    }
+    return { ok: true, polished, deliver: del.mode };
   } catch (e) {
     broadcastStatus({ phase: "idle", error: String(e.message || e) });
     notify(`Polish selection failed: ${e.message || e}`, { force: true });
@@ -1158,6 +1159,23 @@ function pasteText(text) {
   );
 }
 
+/**
+ * Deliver final text: paste into focused app, or leave on clipboard only.
+ * When autoPaste is off, keeps polished text on clipboard for manual Ctrl+V.
+ */
+function deliverText(text) {
+  const t = String(text || "");
+  if (!t) return { mode: "empty" };
+  if (cfg?.autoPaste !== false) {
+    pasteText(t);
+    return { mode: "paste" };
+  }
+  const payload = applyPasteSuffix(t);
+  clipboard.writeText(payload);
+  notify("Copied — Ctrl+V to paste", { force: true });
+  return { mode: "clipboard" };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -1529,7 +1547,7 @@ app.whenReady().then(() => {
   ipcMain.handle("polish-and-paste", async (_e, text) => {
     const polished = await finalizeTranscript(String(text || ""));
     pushHistory(polished);
-    if (cfg.autoPaste !== false) pasteText(polished);
+    deliverText(polished);
     return polished;
   });
   ipcMain.handle("license-status", async () => fetchLicenseStatus());
@@ -1609,10 +1627,14 @@ app.whenReady().then(() => {
     broadcastStatus({ phase: "polishing", last: raw });
     const polished = await finalizeTranscript(raw);
     pushHistory(polished);
-    if (cfg.autoPaste !== false) pasteText(polished);
+    const del = deliverText(polished);
     broadcastStatus({ phase: "idle", last: polished });
-    notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);
-    return { polished };
+    if (del.mode === "paste") {
+      notify(polished.length > 80 ? polished.slice(0, 77) + "…" : polished);
+    } else if (del.mode === "clipboard") {
+      // deliverText already notified "Copied — Ctrl+V"
+    }
+    return { polished, deliver: del.mode };
   });
 
   // First-run: open settings so license can be pasted + welcome toast

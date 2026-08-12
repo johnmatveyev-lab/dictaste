@@ -111,6 +111,7 @@ for (const s of [
   "hotkeyPolish",
   "CommandOrControl+Shift+P",
   "Polish selection",
+  "deliverText",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);

@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.18</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.19</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard.
     <strong style="color:var(--lime)">Polish selection</strong> rewrites highlighted text (Ctrl+Shift+P).
-    Hotkeys are remappable. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Uncheck auto-paste to leave results on the clipboard only. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="status">Ready</div>
 
@@ -62,7 +62,7 @@
 
   <div class="checks">
     <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
-    <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
+    <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation (off = copy to clipboard only)</label>
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
     <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
