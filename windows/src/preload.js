@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   listSapiVoices: () => ipcRenderer.invoke("list-sapi-voices"),
   testVoice: () => ipcRenderer.invoke("test-voice"),
   copyLastTranscript: (index) => ipcRenderer.invoke("copy-last-transcript", index),
+  pasteLastTranscript: (index) => ipcRenderer.invoke("paste-last-transcript", index),
+  cancelDictation: () => ipcRenderer.invoke("cancel-dictation"),
   getHistory: () => ipcRenderer.invoke("get-history"),
   exportHistory: () => ipcRenderer.invoke("export-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),

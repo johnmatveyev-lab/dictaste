@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.21</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.22</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Spoken punctuation (“period”, “comma”, “new line”) and strip fillers (um/uh) run offline before AI polish.
-    Pause hotkeys from the tray when presenting or gaming. Export/import settings (Documents JSON). Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Cancel discards in-progress dictation (no paste). Paste last re-inserts your latest transcript.
+    Spoken punctuation + strip fillers run offline before AI polish. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -55,8 +55,14 @@
 
   <label>Polish selection hotkey</label>
   <input id="hotkeyPolish" placeholder="Ctrl+Shift+P" autocomplete="off" spellcheck="false" />
+
+  <label>Cancel dictation hotkey (discard · no paste)</label>
+  <input id="hotkeyCancel" placeholder="Ctrl+Shift+Escape" autocomplete="off" spellcheck="false" />
+
+  <label>Paste last transcript hotkey</label>
+  <input id="hotkeyPasteLast" placeholder="Ctrl+Shift+V" autocomplete="off" spellcheck="false" />
   <p class="hint" style="margin-top:6px">
-    Examples: <span class="kbd">Ctrl+Shift+Space</span>, <span class="kbd">Ctrl+Shift+P</span>, <span class="kbd">F8</span>.
+    Examples: <span class="kbd">Ctrl+Shift+Space</span>, <span class="kbd">Ctrl+Shift+Escape</span>, <span class="kbd">Ctrl+Shift+V</span>, <span class="kbd">F8</span>.
     Save to apply. Conflicts with other apps may fail to bind.
   </p>
 
@@ -175,6 +181,8 @@
     <button id="refreshPlan" class="ghost">Refresh plan</button>
     <button id="checkUpdates" class="ghost">Check updates</button>
     <button id="copyLast" class="ghost">Copy last transcript</button>
+    <button id="pasteLast" class="ghost">Paste last transcript</button>
+    <button id="cancelDict" class="ghost">Cancel dictation</button>
     <button id="pauseHotkeys" class="ghost">Pause hotkeys</button>
     <button id="exportSettings" class="ghost">Export settings…</button>
     <button id="importSettings" class="ghost">Import settings…</button>
@@ -275,6 +283,10 @@
         c.hotkeyReadDisplay || c.hotkeyRead || 'Ctrl+Shift+R';
       document.getElementById('hotkeyPolish').value =
         c.hotkeyPolishDisplay || c.hotkeyPolish || 'Ctrl+Shift+P';
+      document.getElementById('hotkeyCancel').value =
+        c.hotkeyCancelDisplay || c.hotkeyCancel || 'Ctrl+Shift+Escape';
+      document.getElementById('hotkeyPasteLast').value =
+        c.hotkeyPasteLastDisplay || c.hotkeyPasteLast || 'Ctrl+Shift+V';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('sttLang').value = c.sttLang || 'en-US';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
@@ -368,6 +380,8 @@
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
         hotkeyPolish: document.getElementById('hotkeyPolish').value.trim() || 'Ctrl+Shift+P',
+        hotkeyCancel: document.getElementById('hotkeyCancel').value.trim() || 'Ctrl+Shift+Escape',
+        hotkeyPasteLast: document.getElementById('hotkeyPasteLast').value.trim() || 'Ctrl+Shift+V',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         sttLang: document.getElementById('sttLang').value || 'en-US',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
@@ -386,6 +400,10 @@
         again.hotkeyReadDisplay || again.hotkeyRead || '';
       document.getElementById('hotkeyPolish').value =
         again.hotkeyPolishDisplay || again.hotkeyPolish || '';
+      document.getElementById('hotkeyCancel').value =
+        again.hotkeyCancelDisplay || again.hotkeyCancel || '';
+      document.getElementById('hotkeyPasteLast').value =
+        again.hotkeyPasteLastDisplay || again.hotkeyPasteLast || '';
       document.getElementById('status').textContent = 'Saved · hotkeys applied';
       if (again.licenseKey) await refreshPlan();
     }
@@ -433,6 +451,18 @@
     document.getElementById('copyLast').onclick = async () => {
       const ok = await window.dictaste.copyLastTranscript(0);
       document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
+    };
+    document.getElementById('pasteLast').onclick = async () => {
+      const r = await window.dictaste.pasteLastTranscript(0);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.deliver === 'clipboard' ? 'Last transcript on clipboard' : 'Pasted last transcript')
+        : (r?.error === 'empty' ? 'No transcript yet' : (r?.error || 'Paste last failed'));
+    };
+    document.getElementById('cancelDict').onclick = async () => {
+      const r = await window.dictaste.cancelDictation();
+      document.getElementById('status').textContent = r?.ok
+        ? 'Dictation canceled'
+        : (r?.error === 'idle' ? 'Not dictating' : (r?.error || 'Cancel failed'));
     };
     document.getElementById('pauseHotkeys').onclick = async () => {
       const st = await window.dictaste.getHotkeysPaused();

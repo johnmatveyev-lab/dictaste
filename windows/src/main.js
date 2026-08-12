@@ -21,6 +21,7 @@
  * - Clipboard-only mode when auto-paste is off
  * - Pause hotkeys (tray) + export/import settings
  * - Spoken punctuation + strip fillers (offline cleanup)
+ * - Cancel/discard dictation + paste last transcript hotkey
  */
 const {
   app,
@@ -116,6 +117,10 @@ function defaultConfig() {
     hotkeyRead: "CommandOrControl+Shift+R",
     /** Polish / rewrite selection (paste result) */
     hotkeyPolish: "CommandOrControl+Shift+P",
+    /** Cancel in-progress dictation without paste */
+    hotkeyCancel: "CommandOrControl+Shift+Escape",
+    /** Re-paste last polished transcript into focused app */
+    hotkeyPasteLast: "CommandOrControl+Shift+V",
     /** Last polished dictations (newest first, max 10) */
     history: [],
   };
@@ -124,6 +129,8 @@ function defaultConfig() {
 const DEFAULT_HOTKEY_DICTATE = "CommandOrControl+Shift+Space";
 const DEFAULT_HOTKEY_READ = "CommandOrControl+Shift+R";
 const DEFAULT_HOTKEY_POLISH = "CommandOrControl+Shift+P";
+const DEFAULT_HOTKEY_CANCEL = "CommandOrControl+Shift+Escape";
+const DEFAULT_HOTKEY_PASTE_LAST = "CommandOrControl+Shift+V";
 
 /** Normalize user/settings hotkey strings to Electron accelerators. */
 function toAccelerator(raw, fallback) {
@@ -177,6 +184,14 @@ function hotkeyPolishAccel() {
   return toAccelerator(cfg?.hotkeyPolish, DEFAULT_HOTKEY_POLISH);
 }
 
+function hotkeyCancelAccel() {
+  return toAccelerator(cfg?.hotkeyCancel, DEFAULT_HOTKEY_CANCEL);
+}
+
+function hotkeyPasteLastAccel() {
+  return toAccelerator(cfg?.hotkeyPasteLast, DEFAULT_HOTKEY_PASTE_LAST);
+}
+
 /** Register (or re-register) global hotkeys from config. */
 function registerHotkeys() {
   try {
@@ -192,12 +207,20 @@ function registerHotkeys() {
   const dict = hotkeyDictateAccel();
   const read = hotkeyReadAccel();
   const polish = hotkeyPolishAccel();
+  const cancel = hotkeyCancelAccel();
+  const pasteLast = hotkeyPasteLastAccel();
   const okD = globalShortcut.register(dict, () => toggleListen());
   const okR = globalShortcut.register(read, () => {
     toggleFlowRead().catch(() => {});
   });
   const okP = globalShortcut.register(polish, () => {
     polishSelection().catch(() => {});
+  });
+  const okC = globalShortcut.register(cancel, () => {
+    cancelDictation();
+  });
+  const okL = globalShortcut.register(pasteLast, () => {
+    pasteLastTranscript();
   });
   if (!okD) {
     notify(`Could not bind dictate hotkey (${toDisplayHotkey(dict)}) — try another in Settings`);
@@ -210,9 +233,30 @@ function registerHotkeys() {
       `Could not bind polish hotkey (${toDisplayHotkey(polish)}) — try another in Settings`
     );
   }
+  if (!okC) {
+    notify(
+      `Could not bind cancel hotkey (${toDisplayHotkey(cancel)}) — try another in Settings`
+    );
+  }
+  if (!okL) {
+    notify(
+      `Could not bind paste-last hotkey (${toDisplayHotkey(pasteLast)}) — try another in Settings`
+    );
+  }
   rebuildTrayMenu();
   setTrayLabel();
-  return { dictate: dict, read, polish, okD, okR, okP };
+  return {
+    dictate: dict,
+    read,
+    polish,
+    cancel,
+    pasteLast,
+    okD,
+    okR,
+    okP,
+    okC,
+    okL,
+  };
 }
 
 function setHotkeysPaused(paused) {
@@ -258,6 +302,8 @@ const SETTINGS_EXPORT_KEYS = [
   "hotkeyDictate",
   "hotkeyRead",
   "hotkeyPolish",
+  "hotkeyCancel",
+  "hotkeyPasteLast",
 ];
 
 function exportSettings({ includeSecrets = false } = {}) {
@@ -332,6 +378,8 @@ async function importSettings() {
     cfg.hotkeyDictate = hotkeyDictateAccel();
     cfg.hotkeyRead = hotkeyReadAccel();
     cfg.hotkeyPolish = hotkeyPolishAccel();
+    cfg.hotkeyCancel = hotkeyCancelAccel();
+    cfg.hotkeyPasteLast = hotkeyPasteLastAccel();
     saveConfig(cfg);
     applyLaunchAtLogin(cfg.launchAtLogin);
     if (!hotkeysPaused) registerHotkeys();
@@ -1146,6 +1194,55 @@ function copyLastTranscript(index = 0) {
 }
 
 /**
+ * Re-paste last (or indexed) transcript into the focused app.
+ * Uses same auto-paste / clipboard-only rules as live dictation.
+ */
+function pasteLastTranscript(index = 0) {
+  const hist = normalizeHistory(cfg?.history);
+  const t = String(
+    hist[index] || (index === 0 ? lastTranscript : "") || ""
+  ).trim();
+  if (!t) {
+    notify("No transcript yet — dictate first", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = t;
+  const del = deliverText(t);
+  if (del.mode === "paste") {
+    notify(
+      t.length > 80 ? `Pasted · ${t.slice(0, 77)}…` : `Pasted · ${t}`,
+      { force: true }
+    );
+  }
+  return { ok: true, deliver: del.mode, text: t };
+}
+
+/**
+ * Abort in-progress dictation without polish/paste.
+ * Safe no-op when not listening.
+ */
+function cancelDictation() {
+  if (!listening) {
+    notify("Nothing to cancel — not dictating", { force: false });
+    return { ok: false, error: "idle" };
+  }
+  listening = false;
+  setTrayLabel();
+  broadcastStatus({ phase: "canceling" });
+  if (hudWin && !hudWin.isDestroyed()) {
+    hudWin.webContents.send("dictate-control", {
+      action: "cancel",
+      soundCues: cfg.soundCues !== false,
+    });
+  } else {
+    hideHud();
+    broadcastStatus({ phase: "idle", last: "", canceled: true });
+  }
+  notify("Dictation canceled", { force: true });
+  return { ok: true };
+}
+
+/**
  * Probe live health.releases.windows for a newer Setup zip.
  * Opens download page when behind or on probe failure (unless silent).
  * @param {{ silent?: boolean }} [opts] silent=true: only notify/open when update available
@@ -1632,9 +1729,21 @@ function rebuildTrayMenu() {
       click: () => setHotkeysPaused(!hotkeysPaused),
     },
     {
+      label: `Cancel dictation (${toDisplayHotkey(hotkeyCancelAccel())})`,
+      enabled: listening && !hotkeysPaused,
+      click: () => cancelDictation(),
+    },
+    {
       label: "Copy last transcript",
       enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
       click: () => copyLastTranscript(0),
+    },
+    {
+      label: `Paste last transcript (${toDisplayHotkey(hotkeyPasteLastAccel())})`,
+      enabled:
+        !!String(lastTranscript || cfg?.history?.[0] || "").trim() &&
+        !hotkeysPaused,
+      click: () => pasteLastTranscript(0),
     },
     {
       label: "Test voice",
@@ -1726,6 +1835,8 @@ app.whenReady().then(() => {
   cfg.hotkeyDictate = hotkeyDictateAccel();
   cfg.hotkeyRead = hotkeyReadAccel();
   cfg.hotkeyPolish = hotkeyPolishAccel();
+  cfg.hotkeyCancel = hotkeyCancelAccel();
+  cfg.hotkeyPasteLast = hotkeyPasteLastAccel();
   applyLaunchAtLogin(cfg.launchAtLogin);
   createTray();
   ensureHud();
@@ -1736,6 +1847,8 @@ app.whenReady().then(() => {
     hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
     hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
     hotkeyPolishDisplay: toDisplayHotkey(hotkeyPolishAccel()),
+    hotkeyCancelDisplay: toDisplayHotkey(hotkeyCancelAccel()),
+    hotkeyPasteLastDisplay: toDisplayHotkey(hotkeyPasteLastAccel()),
   }));
   ipcMain.handle("save-config", (_e, next) => {
     const prev = { ...cfg };
@@ -1749,6 +1862,15 @@ app.whenReady().then(() => {
     if (next?.hotkeyPolish != null) {
       cfg.hotkeyPolish = toAccelerator(next.hotkeyPolish, DEFAULT_HOTKEY_POLISH);
     }
+    if (next?.hotkeyCancel != null) {
+      cfg.hotkeyCancel = toAccelerator(next.hotkeyCancel, DEFAULT_HOTKEY_CANCEL);
+    }
+    if (next?.hotkeyPasteLast != null) {
+      cfg.hotkeyPasteLast = toAccelerator(
+        next.hotkeyPasteLast,
+        DEFAULT_HOTKEY_PASTE_LAST
+      );
+    }
     saveConfig(cfg);
     if (Object.prototype.hasOwnProperty.call(next || {}, "launchAtLogin")) {
       applyLaunchAtLogin(cfg.launchAtLogin);
@@ -1756,12 +1878,16 @@ app.whenReady().then(() => {
     const hotkeysChanged =
       prev.hotkeyDictate !== cfg.hotkeyDictate ||
       prev.hotkeyRead !== cfg.hotkeyRead ||
-      prev.hotkeyPolish !== cfg.hotkeyPolish;
+      prev.hotkeyPolish !== cfg.hotkeyPolish ||
+      prev.hotkeyCancel !== cfg.hotkeyCancel ||
+      prev.hotkeyPasteLast !== cfg.hotkeyPasteLast;
     if (
       hotkeysChanged ||
       next?.hotkeyDictate != null ||
       next?.hotkeyRead != null ||
-      next?.hotkeyPolish != null
+      next?.hotkeyPolish != null ||
+      next?.hotkeyCancel != null ||
+      next?.hotkeyPasteLast != null
     ) {
       registerHotkeys();
     } else {
@@ -1773,6 +1899,8 @@ app.whenReady().then(() => {
       hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
       hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
       hotkeyPolishDisplay: toDisplayHotkey(hotkeyPolishAccel()),
+      hotkeyCancelDisplay: toDisplayHotkey(hotkeyCancelAccel()),
+      hotkeyPasteLastDisplay: toDisplayHotkey(hotkeyPasteLastAccel()),
     };
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
@@ -1788,6 +1916,10 @@ app.whenReady().then(() => {
   ipcMain.handle("copy-last-transcript", (_e, index) =>
     copyLastTranscript(Number(index) || 0)
   );
+  ipcMain.handle("paste-last-transcript", (_e, index) =>
+    pasteLastTranscript(Number(index) || 0)
+  );
+  ipcMain.handle("cancel-dictation", () => cancelDictation());
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
   ipcMain.handle("export-history", () => exportHistory());
   ipcMain.handle("clear-history", () => {
@@ -1821,6 +1953,18 @@ app.whenReady().then(() => {
 
   /** HUD finished a session with transcript and/or audio — STT + polish + paste */
   ipcMain.handle("session-complete", async (_e, payload = {}) => {
+    // discard path: cancel hotkey / abort without paste
+    if (payload.discard || payload.canceled) {
+      listening = false;
+      setTrayLabel();
+      hideHud();
+      broadcastStatus({ phase: "idle", last: "", canceled: true });
+      return { polished: "", canceled: true };
+    }
+    return sessionCompleteBody(payload);
+  });
+
+  async function sessionCompleteBody(payload = {}) {
     listening = false;
     setTrayLabel();
     hideHud();
@@ -1872,7 +2016,7 @@ app.whenReady().then(() => {
       // deliverText already notified "Copied — Ctrl+V"
     }
     return { polished, deliver: del.mode };
-  });
+  }
 
   // First-run: open settings so license can be pasted + welcome toast
   if (!cfg.licenseKey) {
@@ -1881,7 +2025,7 @@ app.whenReady().then(() => {
   if (!cfg.seenWelcome) {
     setTimeout(() => {
       notify(
-        `Welcome · Dictaste ${appVersion()}. Dictate ${toDisplayHotkey(hotkeyDictateAccel())} · Read ${toDisplayHotkey(hotkeyReadAccel())} · Polish ${toDisplayHotkey(hotkeyPolishAccel())}. Remap in Settings.`
+        `Welcome · Dictaste ${appVersion()}. Dictate ${toDisplayHotkey(hotkeyDictateAccel())} · Cancel ${toDisplayHotkey(hotkeyCancelAccel())} · Paste last ${toDisplayHotkey(hotkeyPasteLastAccel())}. Remap in Settings.`
       );
       cfg.seenWelcome = true;
       saveConfig(cfg);

@@ -211,6 +211,27 @@
       setTimeout(() => setUI(false), 1600);
     }
 
+    /** Discard in-progress capture — no polish/paste. */
+    async function cancel() {
+      setUI(false, 'Canceled');
+      try { if (rec) rec.abort(); } catch (_) {
+        try { if (rec) rec.stop(); } catch (_) {}
+      }
+      rec = null;
+      finals = [];
+      interim = '';
+      document.getElementById('partial').textContent = '';
+      if (mediaRecorder || mediaChunks.length || mediaStream) {
+        try {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        } catch (_) {}
+        cleanupStream();
+      }
+      mediaChunks = [];
+      await window.dictaste.sessionComplete({ text: '', discard: true, canceled: true });
+      setTimeout(() => setUI(false), 900);
+    }
+
     window.dictaste.onDictateControl((msg) => {
       if (msg.action === 'start') {
         if (msg.soundCues !== false) playCue('start');
@@ -219,6 +240,10 @@
       if (msg.action === 'stop') {
         if (msg.soundCues !== false) playCue('stop');
         stop();
+      }
+      if (msg.action === 'cancel') {
+        if (msg.soundCues !== false) playCue('stop');
+        cancel();
       }
     });
     window.dictaste.onStatus((s) => {

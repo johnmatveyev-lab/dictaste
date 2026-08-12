@@ -218,6 +218,16 @@ if (/id="stripFillers"|Strip fillers/i.test(settings)) {
 } else {
   fail("settings.html missing strip fillers");
 }
+if (/id="hotkeyCancel"|Cancel dictation/i.test(settings)) {
+  pass("settings.html has cancel dictation");
+} else {
+  fail("settings.html missing cancel dictation");
+}
+if (/id="hotkeyPasteLast"|Paste last transcript/i.test(settings)) {
+  pass("settings.html has paste last");
+} else {
+  fail("settings.html missing paste last");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -228,6 +238,11 @@ if (/playCue|soundCues/i.test(hud)) {
   pass("hud.html has sound cues");
 } else {
   fail("hud.html missing sound cues");
+}
+if (/action === ['"]cancel['"]|discard:\s*true/i.test(hud)) {
+  pass("hud.html has cancel/discard");
+} else {
+  fail("hud.html missing cancel/discard");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);
@@ -242,6 +257,10 @@ if (/applySpokenPunctuation|spokenPunctuation/.test(main)) pass("main spoken pun
 else fail("main missing spoken punctuation");
 if (/applyStripFillers|stripFillers/.test(main)) pass("main strip fillers");
 else fail("main missing strip fillers");
+if (/cancelDictation|hotkeyCancel/.test(main)) pass("main cancel dictation");
+else fail("main missing cancel dictation");
+if (/pasteLastTranscript|hotkeyPasteLast/.test(main)) pass("main paste last");
+else fail("main missing paste last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
