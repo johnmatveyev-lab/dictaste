@@ -28,13 +28,13 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.19</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.20</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard.
-    <strong style="color:var(--lime)">Polish selection</strong> rewrites highlighted text (Ctrl+Shift+P).
-    Uncheck auto-paste to leave results on the clipboard only. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Pause hotkeys from the tray when presenting or gaming.
+    Export/import settings (Documents JSON). Uncheck auto-paste for clipboard-only. Portable zip is unsigned — SmartScreen may warn.
   </p>
+  <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
 
   <label>License key (from dictaste.vercel.app/dashboard)</label>
@@ -173,6 +173,9 @@
     <button id="refreshPlan" class="ghost">Refresh plan</button>
     <button id="checkUpdates" class="ghost">Check updates</button>
     <button id="copyLast" class="ghost">Copy last transcript</button>
+    <button id="pauseHotkeys" class="ghost">Pause hotkeys</button>
+    <button id="exportSettings" class="ghost">Export settings…</button>
+    <button id="importSettings" class="ghost">Import settings…</button>
     <button id="run" class="ghost">Polish & paste</button>
     <button id="dash" class="ghost">Dashboard</button>
     <button id="unlock" class="ghost">Free developer unlock</button>
@@ -295,6 +298,21 @@
         } else document.getElementById('status').textContent = 'Ready';
       });
       if (c.licenseKey) refreshPlan().catch(() => {});
+      await refreshPauseBanner();
+    }
+
+    async function refreshPauseBanner() {
+      const st = await window.dictaste.getHotkeysPaused();
+      const banner = document.getElementById('hotkeyBanner');
+      const btn = document.getElementById('pauseHotkeys');
+      if (st?.paused) {
+        banner.style.display = 'block';
+        banner.textContent = 'Global hotkeys are paused. Tray actions still work; click Resume hotkeys to rebind.';
+        btn.textContent = 'Resume hotkeys';
+      } else {
+        banner.style.display = 'none';
+        btn.textContent = 'Pause hotkeys';
+      }
     }
 
     async function renderHistory() {
@@ -409,6 +427,30 @@
     document.getElementById('copyLast').onclick = async () => {
       const ok = await window.dictaste.copyLastTranscript(0);
       document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
+    };
+    document.getElementById('pauseHotkeys').onclick = async () => {
+      const st = await window.dictaste.getHotkeysPaused();
+      await window.dictaste.setHotkeysPaused(!st?.paused);
+      await refreshPauseBanner();
+      document.getElementById('status').textContent = !st?.paused
+        ? 'Hotkeys paused'
+        : 'Hotkeys resumed';
+    };
+    document.getElementById('exportSettings').onclick = async () => {
+      const r = await window.dictaste.exportSettings({ includeSecrets: false });
+      document.getElementById('status').textContent = r?.ok
+        ? 'Settings exported · Documents'
+        : (r?.error || 'Export failed');
+    };
+    document.getElementById('importSettings').onclick = async () => {
+      const r = await window.dictaste.importSettings();
+      if (r?.ok) {
+        document.getElementById('status').textContent = 'Settings imported · reloading…';
+        await boot();
+      } else {
+        document.getElementById('status').textContent =
+          r?.error === 'canceled' ? 'Import canceled' : (r?.error || 'Import failed');
+      }
     };
     document.getElementById('testVoice').onclick = async () => {
       await save();

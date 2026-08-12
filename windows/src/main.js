@@ -19,6 +19,7 @@
  * - Text replacements + auto-capitalize first letter
  * - Polish selection hotkey (rewrite highlighted text)
  * - Clipboard-only mode when auto-paste is off
+ * - Pause hotkeys (tray) + export/import settings
  */
 const {
   app,
@@ -31,6 +32,7 @@ const {
   ipcMain,
   shell,
   Notification,
+  dialog,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -171,6 +173,11 @@ function registerHotkeys() {
   } catch {
     /* ignore */
   }
+  if (hotkeysPaused) {
+    rebuildTrayMenu();
+    setTrayLabel();
+    return { paused: true };
+  }
   const dict = hotkeyDictateAccel();
   const read = hotkeyReadAccel();
   const polish = hotkeyPolishAccel();
@@ -195,6 +202,136 @@ function registerHotkeys() {
   rebuildTrayMenu();
   setTrayLabel();
   return { dictate: dict, read, polish, okD, okR, okP };
+}
+
+function setHotkeysPaused(paused) {
+  hotkeysPaused = !!paused;
+  if (hotkeysPaused) {
+    try {
+      globalShortcut.unregisterAll();
+    } catch {
+      /* ignore */
+    }
+    if (listening) stopListening();
+    if (reading) stopSpeaking();
+    notify("Hotkeys paused — resume from tray", { force: true });
+  } else {
+    registerHotkeys();
+    notify("Hotkeys resumed", { force: true });
+  }
+  rebuildTrayMenu();
+  setTrayLabel();
+  return { paused: hotkeysPaused };
+}
+
+const SETTINGS_EXPORT_KEYS = [
+  "apiBase",
+  "polish",
+  "autoPaste",
+  "pasteSuffix",
+  "sttMode",
+  "sttLang",
+  "whisperBin",
+  "whisperModel",
+  "ttsRate",
+  "ttsSapiVoice",
+  "ttsEngine",
+  "ttsVoice",
+  "launchAtLogin",
+  "quietNotifications",
+  "soundCues",
+  "replacements",
+  "autoCapitalize",
+  "hotkeyDictate",
+  "hotkeyRead",
+  "hotkeyPolish",
+];
+
+function exportSettings({ includeSecrets = false } = {}) {
+  try {
+    const out = {
+      product: "dictaste-windows",
+      version: appVersion(),
+      exportedAt: new Date().toISOString(),
+      settings: {},
+    };
+    for (const k of SETTINGS_EXPORT_KEYS) {
+      if (cfg && Object.prototype.hasOwnProperty.call(cfg, k)) {
+        out.settings[k] = cfg[k];
+      }
+    }
+    if (includeSecrets) {
+      out.settings.licenseKey = cfg?.licenseKey || "";
+      out.settings.openAIKey = cfg?.openAIKey || "";
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const dest = path.join(
+      app.getPath("documents"),
+      `Dictaste-settings-${stamp}.json`
+    );
+    fs.writeFileSync(dest, JSON.stringify(out, null, 2), "utf8");
+    shell.showItemInFolder(dest);
+    notify(
+      includeSecrets
+        ? "Settings exported (includes secrets)"
+        : "Settings exported (no license/API keys)",
+      { force: true }
+    );
+    return { ok: true, path: dest };
+  } catch (e) {
+    notify(`Export settings failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+async function importSettings() {
+  try {
+    const win = settingsWin && !settingsWin.isDestroyed() ? settingsWin : null;
+    const res = await dialog.showOpenDialog(win || undefined, {
+      title: "Import Dictaste settings",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+      properties: ["openFile"],
+    });
+    if (res.canceled || !res.filePaths?.[0]) {
+      return { ok: false, error: "canceled" };
+    }
+    const raw = fs.readFileSync(res.filePaths[0], "utf8");
+    const data = JSON.parse(raw);
+    const incoming = data.settings || data;
+    if (!incoming || typeof incoming !== "object") {
+      notify("Invalid settings file", { force: true });
+      return { ok: false, error: "invalid" };
+    }
+    const next = { ...cfg };
+    for (const k of SETTINGS_EXPORT_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(incoming, k)) {
+        next[k] = incoming[k];
+      }
+    }
+    // Optional secrets if present in file
+    if (typeof incoming.licenseKey === "string" && incoming.licenseKey) {
+      next.licenseKey = incoming.licenseKey;
+    }
+    if (typeof incoming.openAIKey === "string" && incoming.openAIKey) {
+      next.openAIKey = incoming.openAIKey;
+    }
+    cfg = next;
+    cfg.hotkeyDictate = hotkeyDictateAccel();
+    cfg.hotkeyRead = hotkeyReadAccel();
+    cfg.hotkeyPolish = hotkeyPolishAccel();
+    saveConfig(cfg);
+    applyLaunchAtLogin(cfg.launchAtLogin);
+    if (!hotkeysPaused) registerHotkeys();
+    else rebuildTrayMenu();
+    notify("Settings imported", { force: true });
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.webContents.send("status", { phase: "idle", imported: true });
+    }
+    return { ok: true, path: res.filePaths[0] };
+  } catch (e) {
+    notify(`Import settings failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
 }
 
 function saveConfig(cfg) {
@@ -230,6 +367,8 @@ let speakProc = null;
 let cfg = null;
 /** Last polished dictation (tray Copy last transcript) */
 let lastTranscript = "";
+/** Runtime: global hotkeys unbound until resumed (not persisted) */
+let hotkeysPaused = false;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -1232,7 +1371,9 @@ function setTrayLabel() {
   if (!tray) return;
   const d = toDisplayHotkey(hotkeyDictateAccel());
   const r = toDisplayHotkey(hotkeyReadAccel());
-  if (listening) {
+  if (hotkeysPaused) {
+    tray.setToolTip("Dictaste — hotkeys paused");
+  } else if (listening) {
     tray.setToolTip(`Dictaste — listening (${d} to stop)`);
   } else if (reading) {
     tray.setToolTip(`Dictaste — reading (${r} to stop)`);
@@ -1383,19 +1524,26 @@ function rebuildTrayMenu() {
   const p = toDisplayHotkey(hotkeyPolishAccel());
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
+    {
+      label: hotkeysPaused ? "Hotkeys: PAUSED" : "Hotkeys: active",
+      enabled: false,
+    },
     { type: "separator" },
     {
       label: `Toggle dictation (${d})`,
+      enabled: !hotkeysPaused,
       click: () => toggleListen(),
     },
     {
       label: `Read selection (${r})`,
+      enabled: !hotkeysPaused,
       click: () => {
         toggleFlowRead().catch(() => {});
       },
     },
     {
       label: `Polish selection (${p})`,
+      enabled: !hotkeysPaused,
       click: () => {
         polishSelection().catch(() => {});
       },
@@ -1403,6 +1551,10 @@ function rebuildTrayMenu() {
     {
       label: "Stop reading",
       click: () => stopSpeaking(),
+    },
+    {
+      label: hotkeysPaused ? "Resume hotkeys" : "Pause hotkeys",
+      click: () => setHotkeysPaused(!hotkeysPaused),
     },
     {
       label: "Copy last transcript",
@@ -1414,6 +1566,10 @@ function rebuildTrayMenu() {
       click: () => {
         testVoice().catch(() => {});
       },
+    },
+    {
+      label: "Export settings…",
+      click: () => exportSettings({ includeSecrets: false }),
     },
     {
       label: "Recent transcripts",
@@ -1566,6 +1722,12 @@ app.whenReady().then(() => {
     rebuildTrayMenu();
     return true;
   });
+  ipcMain.handle("get-hotkeys-paused", () => ({ paused: hotkeysPaused }));
+  ipcMain.handle("set-hotkeys-paused", (_e, paused) => setHotkeysPaused(!!paused));
+  ipcMain.handle("export-settings", (_e, opts) =>
+    exportSettings(opts || { includeSecrets: false })
+  );
+  ipcMain.handle("import-settings", async () => importSettings());
   ipcMain.handle("read-selection", async () => {
     await toggleFlowRead();
     return { reading };

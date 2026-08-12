@@ -112,6 +112,11 @@ for (const s of [
   "CommandOrControl+Shift+P",
   "Polish selection",
   "deliverText",
+  "hotkeysPaused",
+  "setHotkeysPaused",
+  "exportSettings",
+  "importSettings",
+  "Pause hotkeys",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -192,6 +197,16 @@ if (/id="hotkeyPolish"|Polish selection/i.test(settings)) {
   pass("settings.html has polish selection hotkey");
 } else {
   fail("settings.html missing polish selection hotkey");
+}
+if (/id="pauseHotkeys"|Pause hotkeys/i.test(settings)) {
+  pass("settings.html has pause hotkeys");
+} else {
+  fail("settings.html missing pause hotkeys");
+}
+if (/id="exportSettings"|Import settings/i.test(settings)) {
+  pass("settings.html has export/import settings");
+} else {
+  fail("settings.html missing export/import settings");
 }
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
