@@ -11,4 +11,6 @@ npm start
 npm run pack:zip   # portable zip
 ```
 
+Windows signing path (skeleton): [../docs/WINDOWS-TRUSTED-SIGNING.md](../docs/WINDOWS-TRUSTED-SIGNING.md).
+
 Apache-2.0 — see [../LICENSE](../LICENSE).
