@@ -16,6 +16,7 @@
  * - Web Speech language (BCP-47) selectable in Settings
  * - Test voice (SAPI/premium) + paste suffix (space/newline/period)
  * - Optional dictation sound cues + export history
+ * - Text replacements + auto-capitalize first letter
  */
 const {
   app,
@@ -88,6 +89,13 @@ function defaultConfig() {
     quietNotifications: false,
     /** Soft beep on dictation start/stop (HUD WebAudio) */
     soundCues: true,
+    /**
+     * User replacements, one per line: find=replace
+     * Whole-word, case-insensitive. Applied after polish.
+     */
+    replacements: "",
+    /** Capitalize first letter of the final transcript */
+    autoCapitalize: true,
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
@@ -642,6 +650,52 @@ function requestJson(url, { method = "GET", headers = {}, body } = {}) {
     if (body) req.write(typeof body === "string" ? body : JSON.stringify(body));
     req.end();
   });
+}
+
+/**
+ * Apply user replacements: lines of "find=replace" (whole-word, case-insensitive).
+ */
+function applyReplacements(text) {
+  let out = String(text || "");
+  if (!out) return out;
+  const raw = String(cfg?.replacements || "");
+  if (!raw.trim()) return out;
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const find = trimmed.slice(0, eq).trim();
+    const rep = trimmed.slice(eq + 1).trim();
+    if (!find) continue;
+    try {
+      const re = new RegExp(
+        `\\b${find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "gi"
+      );
+      out = out.replace(re, rep);
+    } catch {
+      /* skip bad pattern */
+    }
+  }
+  return out;
+}
+
+function applyAutoCapitalize(text) {
+  const t = String(text || "");
+  if (!t || cfg?.autoCapitalize === false) return t;
+  // Capitalize first letter of string and after sentence terminators
+  return t.replace(/(^|[.!?…]\s+)([a-zà-öø-ÿ])/g, (_, p, c) => p + c.toUpperCase());
+}
+
+/** polish → replacements → auto-capitalize */
+async function finalizeTranscript(text) {
+  let out = String(text || "").trim();
+  if (!out) return "";
+  out = await polishText(out);
+  out = applyReplacements(out);
+  out = applyAutoCapitalize(out);
+  return out.trim();
 }
 
 async function polishText(text) {
@@ -1385,7 +1439,7 @@ app.whenReady().then(() => {
     };
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
-    const polished = await polishText(String(text || ""));
+    const polished = await finalizeTranscript(String(text || ""));
     pushHistory(polished);
     if (cfg.autoPaste !== false) pasteText(polished);
     return polished;
@@ -1464,7 +1518,7 @@ app.whenReady().then(() => {
       return { polished: "" };
     }
     broadcastStatus({ phase: "polishing", last: raw });
-    const polished = await polishText(raw);
+    const polished = await finalizeTranscript(raw);
     pushHistory(polished);
     if (cfg.autoPaste !== false) pasteText(polished);
     broadcastStatus({ phase: "idle", last: polished });

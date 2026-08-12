@@ -102,6 +102,11 @@ for (const s of [
   "soundCues",
   "exportHistory",
   "export-history",
+  "applyReplacements",
+  "applyAutoCapitalize",
+  "finalizeTranscript",
+  "replacements",
+  "autoCapitalize",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -167,6 +172,16 @@ if (/id="exportHistory"|Export history/i.test(settings)) {
   pass("settings.html has export history");
 } else {
   fail("settings.html missing export history");
+}
+if (/id="replacements"/i.test(settings)) {
+  pass("settings.html has replacements");
+} else {
+  fail("settings.html missing replacements");
+}
+if (/id="autoCapitalize"/i.test(settings)) {
+  pass("settings.html has autoCapitalize");
+} else {
+  fail("settings.html missing autoCapitalize");
 }
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {

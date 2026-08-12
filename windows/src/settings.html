@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.16</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.17</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Sound cues · test voice · paste suffix · export history. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Text replacements · auto-capitalize · sound cues · export history. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -63,7 +63,11 @@
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
     <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
+    <label><input type="checkbox" id="autoCapitalize" checked /> Auto-capitalize sentence starts</label>
   </div>
+
+  <label>Text replacements <span style="font-weight:400;color:var(--muted)">(one per line: find=replace)</span></label>
+  <textarea id="replacements" placeholder="teh=the&#10;btw=by the way&#10;# comments ok" style="min-height:72px;font-family:ui-monospace,monospace;font-size:0.8rem;"></textarea>
 
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
@@ -175,7 +179,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Dictation language applies to Web Speech and Whisper. Sound cues confirm start/stop. Test voice uses current engine/rate/voice. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Replacements + auto-capitalize run after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -243,6 +247,8 @@
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
       document.getElementById('soundCues').checked = c.soundCues !== false;
+      document.getElementById('autoCapitalize').checked = c.autoCapitalize !== false;
+      document.getElementById('replacements').value = c.replacements || '';
       {
         const suf = c.pasteSuffix;
         const el = document.getElementById('pasteSuffix');
@@ -323,6 +329,8 @@
         launchAtLogin: document.getElementById('launchAtLogin').checked,
         quietNotifications: document.getElementById('quietNotifications').checked,
         soundCues: document.getElementById('soundCues').checked,
+        autoCapitalize: document.getElementById('autoCapitalize').checked,
+        replacements: document.getElementById('replacements').value,
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;
           return v === '\\n' ? '\n' : v;
