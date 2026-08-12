@@ -402,6 +402,10 @@ if (/persistHudPosition|resetHudPosition|hudPosX/.test(main)) pass("main sticky 
 else fail("main missing sticky HUD");
 if (/setTtsRate|Speech rate/.test(main)) pass("main tray speech rate");
 else fail("main missing tray speech rate");
+if (/continuousDictation|Continuous dictation/.test(main)) pass("main continuous dictation");
+else fail("main missing continuous dictation");
+if (/setConfigFlag|Quiet notifications/.test(main)) pass("main tray quick toggles");
+else fail("main missing tray quick toggles");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

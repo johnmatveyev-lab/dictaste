@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Continuous dictation · tray quick toggles (quiet/sound/auto-paste)
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -122,6 +123,11 @@ function defaultConfig() {
      * Saves premium TTS quota. 0 = always read. Default 0.
      */
     minWordsForRead: 0,
+    /**
+     * After a successful dictation paste/clipboard, automatically start listening again.
+     * Stop with the dictate hotkey, Cancel, or turn continuous off in tray/Settings.
+     */
+    continuousDictation: false,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -433,6 +439,7 @@ const SETTINGS_EXPORT_KEYS = [
   "showWordCount",
   "minWordsForPolish",
   "minWordsForRead",
+  "continuousDictation",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -1660,7 +1667,7 @@ function copySupportDiagnostics() {
     `Polish: ${cfg?.polish !== false ? "on" : "off"} · minWordsPolish ${minWordsForPolishClamped()} · minWordsRead ${minWordsForReadClamped()}`,
     `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
-    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
+    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
     `History: ${normalizeHistory(cfg?.history).length}/${historyMaxClamped()}`,
     `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
     `Site: https://dictaste.vercel.app · Issues: https://github.com/johnmatveyev-lab/dictaste/issues`,
@@ -2068,7 +2075,8 @@ function setTrayLabel() {
   } else if (reading) {
     tray.setToolTip(`Dictaste — reading (${r} to stop)`);
   } else {
-    tray.setToolTip(`Dictaste — dictate ${d} · ${lang}`);
+    const cont = cfg?.continuousDictation ? " · continuous" : "";
+    tray.setToolTip(`Dictaste — dictate ${d} · ${lang}${cont}`);
   }
 }
 
@@ -2164,6 +2172,19 @@ function setTtsRate(rate) {
   rebuildTrayMenu();
   notify(`Speech rate ${n}`, { force: true });
   return { ok: true, ttsRate: n };
+}
+
+function setConfigFlag(key, on, label) {
+  cfg = { ...cfg, [key]: !!on };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  setTrayLabel();
+  notify(`${label}: ${on ? "on" : "off"}`, { force: true });
+  return { ok: true, [key]: !!on };
 }
 
 function ensureHud() {
@@ -2613,6 +2634,34 @@ function rebuildTrayMenu() {
       ],
     },
     {
+      label: cfg?.continuousDictation
+        ? "Continuous dictation ✓"
+        : "Continuous dictation",
+      type: "checkbox",
+      checked: !!cfg?.continuousDictation,
+      click: (item) =>
+        setConfigFlag("continuousDictation", !!item.checked, "Continuous dictation"),
+    },
+    {
+      label: cfg?.autoPaste !== false ? "Auto-paste ✓" : "Auto-paste",
+      type: "checkbox",
+      checked: cfg?.autoPaste !== false,
+      click: (item) => setConfigFlag("autoPaste", !!item.checked, "Auto-paste"),
+    },
+    {
+      label: cfg?.soundCues !== false ? "Sound cues ✓" : "Sound cues",
+      type: "checkbox",
+      checked: cfg?.soundCues !== false,
+      click: (item) => setConfigFlag("soundCues", !!item.checked, "Sound cues"),
+    },
+    {
+      label: cfg?.quietNotifications ? "Quiet notifications ✓" : "Quiet notifications",
+      type: "checkbox",
+      checked: !!cfg?.quietNotifications,
+      click: (item) =>
+        setConfigFlag("quietNotifications", !!item.checked, "Quiet notifications"),
+    },
+    {
       label: cfg?.hudCompact ? "HUD: compact ✓" : "HUD: compact",
       type: "checkbox",
       checked: !!cfg?.hudCompact,
@@ -2909,6 +2958,16 @@ app.whenReady().then(() => {
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
   ipcMain.handle("reset-hud-position", () => resetHudPosition());
   ipcMain.handle("set-tts-rate", (_e, rate) => setTtsRate(rate));
+  ipcMain.handle("set-config-flag", (_e, key, on) => {
+    const labels = {
+      continuousDictation: "Continuous dictation",
+      autoPaste: "Auto-paste",
+      soundCues: "Sound cues",
+      quietNotifications: "Quiet notifications",
+    };
+    if (!labels[key]) return { ok: false, error: "unknown" };
+    return setConfigFlag(key, on, labels[key]);
+  });
   ipcMain.handle("clear-history", () => clearHistory());
   ipcMain.handle("reread-last", async () => rereadLast());
   ipcMain.handle("repolish-last", async (_e, index) =>
@@ -3008,6 +3067,14 @@ app.whenReady().then(() => {
       notifyDeliver(polished, "paste");
     } else if (del.mode === "clipboard") {
       // deliverText already notified via notifyDeliver
+    }
+    // Continuous dictation: auto-restart listening after successful delivery
+    if (cfg?.continuousDictation && !hotkeysPaused && polished) {
+      setTimeout(() => {
+        if (hotkeysPaused || listening || reading) return;
+        if (!cfg?.continuousDictation) return;
+        startListening().catch(() => {});
+      }, 450);
     }
     return { polished, deliver: del.mode, words: del.words };
   }
