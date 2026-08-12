@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   testVoice: () => ipcRenderer.invoke("test-voice"),
   copyLastTranscript: (index) => ipcRenderer.invoke("copy-last-transcript", index),
   getHistory: () => ipcRenderer.invoke("get-history"),
+  exportHistory: () => ipcRenderer.invoke("export-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),
   readSelection: () => ipcRenderer.invoke("read-selection"),
   stopReading: () => ipcRenderer.invoke("stop-reading"),

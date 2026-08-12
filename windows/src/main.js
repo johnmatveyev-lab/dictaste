@@ -15,6 +15,7 @@
  * - Tray: copy last transcript + recent history
  * - Web Speech language (BCP-47) selectable in Settings
  * - Test voice (SAPI/premium) + paste suffix (space/newline/period)
+ * - Optional dictation sound cues + export history
  */
 const {
   app,
@@ -85,6 +86,8 @@ function defaultConfig() {
      * Errors, quota, and update prompts still notify.
      */
     quietNotifications: false,
+    /** Soft beep on dictation start/stop (HUD WebAudio) */
+    soundCues: true,
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
@@ -1153,6 +1156,7 @@ async function startListening() {
       action: "start",
       sttMode: cfg.sttMode || "webspeech",
       sttLang: cfg.sttLang || "en-US",
+      soundCues: cfg.soundCues !== false,
     });
   }
   // Also open settings window if never opened so user can save license first session
@@ -1167,7 +1171,33 @@ async function stopListening() {
   setTrayLabel();
   broadcastStatus({ phase: "stopping" });
   if (hudWin && !hudWin.isDestroyed()) {
-    hudWin.webContents.send("dictate-control", { action: "stop" });
+    hudWin.webContents.send("dictate-control", {
+      action: "stop",
+      soundCues: cfg.soundCues !== false,
+    });
+  }
+}
+
+function exportHistory() {
+  const hist = normalizeHistory(cfg?.history);
+  if (!hist.length) {
+    notify("No transcripts to export yet", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const dest = path.join(app.getPath("documents"), `Dictaste-history-${stamp}.txt`);
+  const body =
+    `# Dictaste recent transcripts\n# ${new Date().toISOString()}\n\n` +
+    hist.map((t, i) => `${i + 1}. ${t}`).join("\n\n") +
+    "\n";
+  try {
+    fs.writeFileSync(dest, body, "utf8");
+    shell.showItemInFolder(dest);
+    notify(`Exported ${hist.length} transcripts`, { force: true });
+    return { ok: true, path: dest, count: hist.length };
+  } catch (e) {
+    notify(`Export failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
   }
 }
 
@@ -1246,10 +1276,17 @@ function rebuildTrayMenu() {
         if (!hist.length) {
           return [{ label: "(empty)", enabled: false }];
         }
-        return hist.map((t, i) => ({
-          label: (t.length > 48 ? t.slice(0, 45) + "…" : t).replace(/\s+/g, " "),
-          click: () => copyLastTranscript(i),
-        }));
+        return [
+          ...hist.map((t, i) => ({
+            label: (t.length > 48 ? t.slice(0, 45) + "…" : t).replace(/\s+/g, " "),
+            click: () => copyLastTranscript(i),
+          })),
+          { type: "separator" },
+          {
+            label: "Export history…",
+            click: () => exportHistory(),
+          },
+        ];
       })(),
     },
     { label: "Settings…", click: () => openSettings() },
@@ -1361,6 +1398,7 @@ app.whenReady().then(() => {
     copyLastTranscript(Number(index) || 0)
   );
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
+  ipcMain.handle("export-history", () => exportHistory());
   ipcMain.handle("clear-history", () => {
     cfg = { ...cfg, history: [] };
     lastTranscript = "";

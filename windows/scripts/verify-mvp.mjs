@@ -99,6 +99,9 @@ for (const s of [
   "applyPasteSuffix",
   "testVoice",
   "test-voice",
+  "soundCues",
+  "exportHistory",
+  "export-history",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -155,11 +158,26 @@ if (/id="testVoice"|Test voice/i.test(settings)) {
 } else {
   fail("settings.html missing test voice");
 }
+if (/id="soundCues"/i.test(settings)) {
+  pass("settings.html has soundCues");
+} else {
+  fail("settings.html missing soundCues");
+}
+if (/id="exportHistory"|Export history/i.test(settings)) {
+  pass("settings.html has export history");
+} else {
+  fail("settings.html missing export history");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
 } else {
   fail("hud.html missing sttLang wiring");
+}
+if (/playCue|soundCues/i.test(hud)) {
+  pass("hud.html has sound cues");
+} else {
+  fail("hud.html missing sound cues");
 }
 if (/^0\.1\.\d+$/.test(pkg.version)) {
   pass(`package version ${pkg.version}`);

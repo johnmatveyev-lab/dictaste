@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.15</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.16</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
     Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
     Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Dictation language · test voice · paste suffix · recent transcripts. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Sound cues · test voice · paste suffix · export history. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -62,6 +62,7 @@
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation</label>
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
+    <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
   </div>
 
   <label>After paste</label>
@@ -152,6 +153,7 @@
   </div>
   <div class="row" style="margin-top:8px">
     <button type="button" id="refreshHistory" class="ghost">Refresh history</button>
+    <button type="button" id="exportHistory" class="ghost">Export history…</button>
     <button type="button" id="clearHistory" class="ghost">Clear history</button>
   </div>
 
@@ -173,7 +175,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Dictation language applies to Web Speech and Whisper. Test voice uses current engine/rate/voice. After-paste suffix chains dictations cleanly. Recent transcripts in tray + Settings. Startup silently checks for newer Setup builds.
+    Dictation language applies to Web Speech and Whisper. Sound cues confirm start/stop. Test voice uses current engine/rate/voice. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -240,6 +242,7 @@
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
+      document.getElementById('soundCues').checked = c.soundCues !== false;
       {
         const suf = c.pasteSuffix;
         const el = document.getElementById('pasteSuffix');
@@ -319,6 +322,7 @@
         autoPaste: document.getElementById('autoPaste').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
         quietNotifications: document.getElementById('quietNotifications').checked,
+        soundCues: document.getElementById('soundCues').checked,
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;
           return v === '\\n' ? '\n' : v;
@@ -400,6 +404,12 @@
     document.getElementById('refreshHistory').onclick = async () => {
       await renderHistory();
       document.getElementById('status').textContent = 'History refreshed';
+    };
+    document.getElementById('exportHistory').onclick = async () => {
+      const r = await window.dictaste.exportHistory();
+      document.getElementById('status').textContent = r?.ok
+        ? 'Exported ' + (r.count || '') + ' · Documents'
+        : (r?.error === 'empty' ? 'No transcripts yet' : (r?.error || 'Export failed'));
     };
     document.getElementById('clearHistory').onclick = async () => {
       await window.dictaste.clearHistory();
