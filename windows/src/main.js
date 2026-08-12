@@ -20,6 +20,7 @@
  * - Polish selection hotkey (rewrite highlighted text)
  * - Clipboard-only mode when auto-paste is off
  * - Pause hotkeys (tray) + export/import settings
+ * - Spoken punctuation + strip fillers (offline cleanup)
  */
 const {
   app,
@@ -100,6 +101,16 @@ function defaultConfig() {
     replacements: "",
     /** Capitalize first letter of the final transcript */
     autoCapitalize: true,
+    /**
+     * Strip common filler words (um, uh, er, ah, hmm, you know) before polish.
+     * English-oriented; off for non-English STT if desired.
+     */
+    stripFillers: true,
+    /**
+     * Spoken punctuation: "period" → .  "comma" → ,  "new line" → newline, etc.
+     * Applied before polish so AI sees clean structure.
+     */
+    spokenPunctuation: true,
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
@@ -242,6 +253,8 @@ const SETTINGS_EXPORT_KEYS = [
   "soundCues",
   "replacements",
   "autoCapitalize",
+  "stripFillers",
+  "spokenPunctuation",
   "hotkeyDictate",
   "hotkeyRead",
   "hotkeyPolish",
@@ -896,10 +909,72 @@ function applyAutoCapitalize(text) {
   return t.replace(/(^|[.!?…]\s+)([a-zà-öø-ÿ])/g, (_, p, c) => p + c.toUpperCase());
 }
 
-/** polish → replacements → auto-capitalize */
+/**
+ * Strip common English fillers (um, uh, er, ah, hmm, you know, like as filler).
+ * Conservative: only standalone tokens, not mid-word.
+ */
+function applyStripFillers(text) {
+  let out = String(text || "");
+  if (!out || cfg?.stripFillers === false) return out;
+  // Multi-word first
+  out = out.replace(/\b(you know|i mean|kind of|sort of)\b/gi, " ");
+  // Single fillers (avoid "like" — too often real content)
+  out = out.replace(/\b(um+|uh+|er+|ah+|hmm+|mm+|mhm|uh-huh|uh huh)\b/gi, " ");
+  // Collapse whitespace left by removals
+  out = out.replace(/[ \t]{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1");
+  return out.trim();
+}
+
+/**
+ * Spoken punctuation commands → real punctuation.
+ * Longer phrases first. Case-insensitive whole words.
+ */
+function applySpokenPunctuation(text) {
+  let out = String(text || "");
+  if (!out || cfg?.spokenPunctuation === false) return out;
+  const rules = [
+    [/\bnew paragraph\b/gi, "\n\n"],
+    [/\bnew line\b/gi, "\n"],
+    [/\bnext line\b/gi, "\n"],
+    [/\bquestion mark\b/gi, "?"],
+    [/\bexclamation (mark|point)\b/gi, "!"],
+    [/\bellipsis\b/gi, "…"],
+    [/\bopen quote\b/gi, "\u201C"],
+    [/\bclose quote\b/gi, "\u201D"],
+    [/\bopen paren(thesis)?\b/gi, "("],
+    [/\bclose paren(thesis)?\b/gi, ")"],
+    [/\bdash\b/gi, "—"],
+    [/\bhyphen\b/gi, "-"],
+    [/\bsemicolon\b/gi, ";"],
+    [/\bcolon\b/gi, ":"],
+    [/\bcomma\b/gi, ","],
+    [/\bperiod\b/gi, "."],
+    [/\bfull stop\b/gi, "."],
+  ];
+  for (const [re, rep] of rules) {
+    out = out.replace(re, rep);
+  }
+  // Tidy: space before newline/punct, double spaces, space after , . ? ! :
+  out = out
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.;:!?…])/g, "$1")
+    .replace(/([,.;:!?…])([A-Za-zÀ-öø-ÿ])/g, "$1 $2")
+    .replace(/([.!?…])\s*\n/g, "$1\n")
+    .trim();
+  return out;
+}
+
+/**
+ * Offline cleanup → polish → replacements → auto-capitalize.
+ * Spoken punctuation + filler strip run first so polish sees clean structure.
+ */
 async function finalizeTranscript(text) {
   let out = String(text || "").trim();
   if (!out) return "";
+  out = applySpokenPunctuation(out);
+  out = applyStripFillers(out);
   out = await polishText(out);
   out = applyReplacements(out);
   out = applyAutoCapitalize(out);

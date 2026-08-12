@@ -208,6 +208,16 @@ if (/id="exportSettings"|Import settings/i.test(settings)) {
 } else {
   fail("settings.html missing export/import settings");
 }
+if (/id="spokenPunctuation"|Spoken punctuation/i.test(settings)) {
+  pass("settings.html has spoken punctuation");
+} else {
+  fail("settings.html missing spoken punctuation");
+}
+if (/id="stripFillers"|Strip fillers/i.test(settings)) {
+  pass("settings.html has strip fillers");
+} else {
+  fail("settings.html missing strip fillers");
+}
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {
   pass("hud.html accepts sttLang");
@@ -228,6 +238,10 @@ if (/^0\.1\.\d+$/.test(pkg.version)) {
 if (/waitlist/i.test(main)) fail("waitlist copy still in main.js");
 else pass("no waitlist copy in main.js");
 
+if (/applySpokenPunctuation|spokenPunctuation/.test(main)) pass("main spoken punctuation");
+else fail("main missing spoken punctuation");
+if (/applyStripFillers|stripFillers/.test(main)) pass("main strip fillers");
+else fail("main missing strip fillers");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

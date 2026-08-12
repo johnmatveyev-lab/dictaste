@@ -28,11 +28,11 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.20</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.21</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Pause hotkeys from the tray when presenting or gaming.
-    Export/import settings (Documents JSON). Uncheck auto-paste for clipboard-only. Portable zip is unsigned — SmartScreen may warn.
+    Dictate · highlight-to-speak · polish selection. Spoken punctuation (“period”, “comma”, “new line”) and strip fillers (um/uh) run offline before AI polish.
+    Pause hotkeys from the tray when presenting or gaming. Export/import settings (Documents JSON). Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
   <div id="status">Ready</div>
@@ -67,6 +67,8 @@
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
     <label><input type="checkbox" id="soundCues" checked /> Sound cues on dictation start/stop</label>
     <label><input type="checkbox" id="autoCapitalize" checked /> Auto-capitalize sentence starts</label>
+    <label><input type="checkbox" id="spokenPunctuation" checked /> Spoken punctuation (period, comma, new line…)</label>
+    <label><input type="checkbox" id="stripFillers" checked /> Strip fillers (um, uh, you know…)</label>
   </div>
 
   <label>Text replacements <span style="font-weight:400;color:var(--muted)">(one per line: find=replace)</span></label>
@@ -186,7 +188,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Replacements + auto-capitalize run after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -255,6 +257,8 @@
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
       document.getElementById('soundCues').checked = c.soundCues !== false;
       document.getElementById('autoCapitalize').checked = c.autoCapitalize !== false;
+      document.getElementById('spokenPunctuation').checked = c.spokenPunctuation !== false;
+      document.getElementById('stripFillers').checked = c.stripFillers !== false;
       document.getElementById('replacements').value = c.replacements || '';
       {
         const suf = c.pasteSuffix;
@@ -354,6 +358,8 @@
         quietNotifications: document.getElementById('quietNotifications').checked,
         soundCues: document.getElementById('soundCues').checked,
         autoCapitalize: document.getElementById('autoCapitalize').checked,
+        spokenPunctuation: document.getElementById('spokenPunctuation').checked,
+        stripFillers: document.getElementById('stripFillers').checked,
         replacements: document.getElementById('replacements').value,
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;
