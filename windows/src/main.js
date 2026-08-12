@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Live HUD word count · skip short highlight-to-speak under N words
  * - Re-read last · clear history (tray)
  * - Tray app + lime brand icon
  * - Remappable global hotkeys (defaults Ctrl+Shift+Space / Ctrl+Shift+R)
@@ -111,6 +112,11 @@ function defaultConfig() {
      * Offline cleanup (punctuation, fillers, smart quotes) still runs. 0 = always polish.
      */
     minWordsForPolish: 3,
+    /**
+     * Skip highlight-to-speak when selection has fewer than this many words.
+     * Saves premium TTS quota. 0 = always read. Default 0.
+     */
+    minWordsForRead: 0,
     /** webspeech | openai | whisper-cli */
     sttMode: "webspeech",
     /** BCP-47 language for Web Speech (and Whisper language when set) */
@@ -419,6 +425,7 @@ const SETTINGS_EXPORT_KEYS = [
   "hudCompact",
   "showWordCount",
   "minWordsForPolish",
+  "minWordsForRead",
   "sttMode",
   "sttLang",
   "caseMode",
@@ -979,6 +986,19 @@ async function speakReadText(text) {
     notify("Nothing to read", { force: true });
     return { ok: false, error: "empty" };
   }
+  const wc = countWords(t);
+  const minR = minWordsForReadClamped();
+  if (minR > 0 && wc < minR) {
+    notify(
+      `Skipped read · ${wc} word${wc === 1 ? "" : "s"} (min ${minR})`,
+      { force: true }
+    );
+    // Still remember for Re-read last if user lowers threshold later
+    lastReadText = t;
+    lastTranscript = t;
+    rebuildTrayMenu();
+    return { ok: false, error: "too_short", words: wc, min: minR };
+  }
   if (reading) {
     stopSpeaking();
     await sleep(80);
@@ -988,7 +1008,6 @@ async function speakReadText(text) {
     await sleep(200);
   }
   const preview = t.length > 60 ? t.slice(0, 57) + "…" : t;
-  const wc = countWords(t);
   lastReadText = t;
   // Also surface in "copy last" path without pushing dictation history
   lastTranscript = t;
@@ -1353,6 +1372,12 @@ function minWordsForPolishClamped() {
   const n = Number(cfg?.minWordsForPolish);
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.max(0, Math.min(50, Math.round(n)));
+}
+
+function minWordsForReadClamped() {
+  const n = Number(cfg?.minWordsForRead);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(15, Math.floor(n));
 }
 
 async function polishText(text) {

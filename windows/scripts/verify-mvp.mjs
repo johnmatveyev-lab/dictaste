@@ -390,6 +390,10 @@ if (/rereadLast|Re-read last|speakReadText/.test(main)) pass("main re-read last"
 else fail("main missing re-read last");
 if (/function clearHistory|Clear history/.test(main)) pass("main clear history");
 else fail("main missing clear history");
+if (/minWordsForRead|minWordsForReadClamped/.test(main)) pass("main skip short reads");
+else fail("main missing skip short reads");
+if (/liveWordLabel|countWords/.test(hud)) pass("hud live word count");
+else fail("hud missing live word count");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

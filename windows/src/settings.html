@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.31</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.32</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Re-read last · clear history from tray. Skip AI polish for short phrases (saves quota).
+    Dictate · highlight-to-speak · polish selection. Live HUD word count · skip short reads · re-read last · clear history.
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -101,6 +101,9 @@
 
   <label>Min words for AI polish <span id="minPolishVal" style="color:var(--lime)">3</span> (0 = always · skip short phrases)</label>
   <input id="minWordsForPolish" type="range" min="0" max="15" step="1" value="3" style="width:100%;accent-color:var(--lime);" />
+
+  <label>Min words for highlight-to-speak <span id="minReadVal" style="color:var(--lime)">0</span> (0 = always · skip short selections)</label>
+  <input id="minWordsForRead" type="range" min="0" max="15" step="1" value="0" style="width:100%;accent-color:var(--lime);" />
 
   <label>Max dictation <span id="maxDictVal" style="color:var(--lime)">90s</span> (0 = no cap · safety stop)</label>
   <input id="maxDictation" type="range" min="0" max="180" step="15" value="90" style="width:100%;accent-color:var(--lime);" />
@@ -231,7 +234,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -333,6 +336,13 @@
         document.getElementById('minWordsForPolish').value = String(mw);
         const v = Number(document.getElementById('minWordsForPolish').value) || 0;
         document.getElementById('minPolishVal').textContent = v === 0 ? 'always' : String(v);
+      }
+      {
+        const mrRaw = c.minWordsForRead;
+        const mr = Number.isFinite(Number(mrRaw)) ? Math.max(0, Math.min(15, Number(mrRaw))) : 0;
+        document.getElementById('minWordsForRead').value = String(mr);
+        const v = Number(document.getElementById('minWordsForRead').value) || 0;
+        document.getElementById('minReadVal').textContent = v === 0 ? 'always' : String(v);
       }
       {
         const hm = Math.max(10, Math.min(50, Number(c.historyMax) || 25));
@@ -479,6 +489,7 @@
           Math.min(500, Number(document.getElementById('pasteDelay').value) || 80)
         ),
         minWordsForPolish: Math.max(0, Math.min(15, Number(document.getElementById('minWordsForPolish').value) || 0)),
+        minWordsForRead: Math.max(0, Math.min(15, Number(document.getElementById('minWordsForRead').value) || 0)),
         maxDictationMs:
           Math.max(0, Math.min(180, Number(document.getElementById('maxDictation').value) || 0)) *
           1000,
@@ -558,6 +569,10 @@
     document.getElementById('minWordsForPolish').oninput = () => {
       const v = Number(document.getElementById('minWordsForPolish').value) || 0;
       document.getElementById('minPolishVal').textContent = v === 0 ? 'always' : String(v);
+    };
+    document.getElementById('minWordsForRead').oninput = () => {
+      const v = Number(document.getElementById('minWordsForRead').value) || 0;
+      document.getElementById('minReadVal').textContent = v === 0 ? 'always' : String(v);
     };
     document.getElementById('maxDictation').oninput = () => {
       const sec = Number(document.getElementById('maxDictation').value) || 0;
