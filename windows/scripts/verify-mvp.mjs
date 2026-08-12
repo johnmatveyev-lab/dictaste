@@ -107,6 +107,10 @@ for (const s of [
   "finalizeTranscript",
   "replacements",
   "autoCapitalize",
+  "polishSelection",
+  "hotkeyPolish",
+  "CommandOrControl+Shift+P",
+  "Polish selection",
   "silent: true",
 ]) {
   if (main.includes(s)) pass(`main.js has ${s}`);
@@ -182,6 +186,11 @@ if (/id="autoCapitalize"/i.test(settings)) {
   pass("settings.html has autoCapitalize");
 } else {
   fail("settings.html missing autoCapitalize");
+}
+if (/id="hotkeyPolish"|Polish selection/i.test(settings)) {
+  pass("settings.html has polish selection hotkey");
+} else {
+  fail("settings.html missing polish selection hotkey");
 }
 const hud = readFileSync(resolve(root, "src/hud.html"), "utf8");
 if (/sttLang|msg\.sttLang/i.test(hud)) {

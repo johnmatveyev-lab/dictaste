@@ -17,6 +17,7 @@
  * - Test voice (SAPI/premium) + paste suffix (space/newline/period)
  * - Optional dictation sound cues + export history
  * - Text replacements + auto-capitalize first letter
+ * - Polish selection hotkey (rewrite highlighted text)
  */
 const {
   app,
@@ -99,6 +100,8 @@ function defaultConfig() {
     /** Electron accelerators (also accept Ctrl+… display form) */
     hotkeyDictate: "CommandOrControl+Shift+Space",
     hotkeyRead: "CommandOrControl+Shift+R",
+    /** Polish / rewrite selection (paste result) */
+    hotkeyPolish: "CommandOrControl+Shift+P",
     /** Last polished dictations (newest first, max 10) */
     history: [],
   };
@@ -106,6 +109,7 @@ function defaultConfig() {
 
 const DEFAULT_HOTKEY_DICTATE = "CommandOrControl+Shift+Space";
 const DEFAULT_HOTKEY_READ = "CommandOrControl+Shift+R";
+const DEFAULT_HOTKEY_POLISH = "CommandOrControl+Shift+P";
 
 /** Normalize user/settings hotkey strings to Electron accelerators. */
 function toAccelerator(raw, fallback) {
@@ -155,6 +159,10 @@ function hotkeyReadAccel() {
   return toAccelerator(cfg?.hotkeyRead, DEFAULT_HOTKEY_READ);
 }
 
+function hotkeyPolishAccel() {
+  return toAccelerator(cfg?.hotkeyPolish, DEFAULT_HOTKEY_POLISH);
+}
+
 /** Register (or re-register) global hotkeys from config. */
 function registerHotkeys() {
   try {
@@ -164,9 +172,13 @@ function registerHotkeys() {
   }
   const dict = hotkeyDictateAccel();
   const read = hotkeyReadAccel();
+  const polish = hotkeyPolishAccel();
   const okD = globalShortcut.register(dict, () => toggleListen());
   const okR = globalShortcut.register(read, () => {
     toggleFlowRead().catch(() => {});
+  });
+  const okP = globalShortcut.register(polish, () => {
+    polishSelection().catch(() => {});
   });
   if (!okD) {
     notify(`Could not bind dictate hotkey (${toDisplayHotkey(dict)}) — try another in Settings`);
@@ -174,9 +186,14 @@ function registerHotkeys() {
   if (!okR) {
     notify(`Could not bind read hotkey (${toDisplayHotkey(read)}) — try another in Settings`);
   }
+  if (!okP) {
+    notify(
+      `Could not bind polish hotkey (${toDisplayHotkey(polish)}) — try another in Settings`
+    );
+  }
   rebuildTrayMenu();
   setTrayLabel();
-  return { dictate: dict, read, okD, okR };
+  return { dictate: dict, read, polish, okD, okR, okP };
 }
 
 function saveConfig(cfg) {
@@ -604,7 +621,9 @@ async function toggleFlowRead() {
     return;
   }
   if (!text) {
-    notify("Highlight text (or copy) then press Ctrl+Shift+R");
+    notify(
+      `Highlight text (or copy) then press ${toDisplayHotkey(hotkeyReadAccel())}`
+    );
     return;
   }
   const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
@@ -616,6 +635,55 @@ async function toggleFlowRead() {
     await speakText(text);
   } catch (e) {
     notify(`Read failed: ${e.message || e}`);
+  }
+}
+
+/**
+ * Polish / rewrite highlighted (or clipboard) text and paste result.
+ * Applies AI polish + replacements + auto-capitalize.
+ */
+async function polishSelection() {
+  if (listening) {
+    await stopListening();
+    await sleep(200);
+  }
+  if (reading) stopSpeaking();
+  let text = "";
+  try {
+    text = await captureSelectionText();
+  } catch (e) {
+    notify(`Selection failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+  if (!text) {
+    notify(
+      `Highlight text (or copy) then press ${toDisplayHotkey(hotkeyPolishAccel())}`,
+      { force: true }
+    );
+    return { ok: false, error: "empty" };
+  }
+  broadcastStatus({ phase: "polishing", last: text });
+  notify(
+    `Polishing selection · ${text.length > 40 ? text.slice(0, 37) + "…" : text}`
+  );
+  try {
+    const polished = await finalizeTranscript(text);
+    if (!polished) {
+      broadcastStatus({ phase: "idle", last: text });
+      notify("Polish returned empty", { force: true });
+      return { ok: false, error: "empty-result" };
+    }
+    pushHistory(polished);
+    pasteText(polished);
+    broadcastStatus({ phase: "idle", last: polished });
+    notify(
+      polished.length > 80 ? polished.slice(0, 77) + "…" : polished
+    );
+    return { ok: true, polished };
+  } catch (e) {
+    broadcastStatus({ phase: "idle", error: String(e.message || e) });
+    notify(`Polish selection failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
   }
 }
 
@@ -1294,6 +1362,7 @@ function rebuildTrayMenu() {
   const base = () => (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
   const d = toDisplayHotkey(hotkeyDictateAccel());
   const r = toDisplayHotkey(hotkeyReadAccel());
+  const p = toDisplayHotkey(hotkeyPolishAccel());
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
     { type: "separator" },
@@ -1305,6 +1374,12 @@ function rebuildTrayMenu() {
       label: `Read selection (${r})`,
       click: () => {
         toggleFlowRead().catch(() => {});
+      },
+    },
+    {
+      label: `Polish selection (${p})`,
+      click: () => {
+        polishSelection().catch(() => {});
       },
     },
     {
@@ -1401,6 +1476,7 @@ app.whenReady().then(() => {
   // Normalize hotkeys into accelerator form on load
   cfg.hotkeyDictate = hotkeyDictateAccel();
   cfg.hotkeyRead = hotkeyReadAccel();
+  cfg.hotkeyPolish = hotkeyPolishAccel();
   applyLaunchAtLogin(cfg.launchAtLogin);
   createTray();
   ensureHud();
@@ -1410,6 +1486,7 @@ app.whenReady().then(() => {
     ...cfg,
     hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
     hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
+    hotkeyPolishDisplay: toDisplayHotkey(hotkeyPolishAccel()),
   }));
   ipcMain.handle("save-config", (_e, next) => {
     const prev = { ...cfg };
@@ -1420,13 +1497,23 @@ app.whenReady().then(() => {
     if (next?.hotkeyRead != null) {
       cfg.hotkeyRead = toAccelerator(next.hotkeyRead, DEFAULT_HOTKEY_READ);
     }
+    if (next?.hotkeyPolish != null) {
+      cfg.hotkeyPolish = toAccelerator(next.hotkeyPolish, DEFAULT_HOTKEY_POLISH);
+    }
     saveConfig(cfg);
     if (Object.prototype.hasOwnProperty.call(next || {}, "launchAtLogin")) {
       applyLaunchAtLogin(cfg.launchAtLogin);
     }
     const hotkeysChanged =
-      prev.hotkeyDictate !== cfg.hotkeyDictate || prev.hotkeyRead !== cfg.hotkeyRead;
-    if (hotkeysChanged || next?.hotkeyDictate != null || next?.hotkeyRead != null) {
+      prev.hotkeyDictate !== cfg.hotkeyDictate ||
+      prev.hotkeyRead !== cfg.hotkeyRead ||
+      prev.hotkeyPolish !== cfg.hotkeyPolish;
+    if (
+      hotkeysChanged ||
+      next?.hotkeyDictate != null ||
+      next?.hotkeyRead != null ||
+      next?.hotkeyPolish != null
+    ) {
       registerHotkeys();
     } else {
       rebuildTrayMenu();
@@ -1436,6 +1523,7 @@ app.whenReady().then(() => {
       ...cfg,
       hotkeyDictateDisplay: toDisplayHotkey(hotkeyDictateAccel()),
       hotkeyReadDisplay: toDisplayHotkey(hotkeyReadAccel()),
+      hotkeyPolishDisplay: toDisplayHotkey(hotkeyPolishAccel()),
     };
   });
   ipcMain.handle("polish-and-paste", async (_e, text) => {
@@ -1464,6 +1552,7 @@ app.whenReady().then(() => {
     await toggleFlowRead();
     return { reading };
   });
+  ipcMain.handle("polish-selection", async () => polishSelection());
   ipcMain.handle("stop-reading", () => {
     stopSpeaking();
     return true;
@@ -1533,7 +1622,7 @@ app.whenReady().then(() => {
   if (!cfg.seenWelcome) {
     setTimeout(() => {
       notify(
-        `Welcome · Dictaste ${appVersion()}. Dictate ${toDisplayHotkey(hotkeyDictateAccel())} · Read ${toDisplayHotkey(hotkeyReadAccel())}. Remap hotkeys in Settings.`
+        `Welcome · Dictaste ${appVersion()}. Dictate ${toDisplayHotkey(hotkeyDictateAccel())} · Read ${toDisplayHotkey(hotkeyReadAccel())} · Polish ${toDisplayHotkey(hotkeyPolishAccel())}. Remap in Settings.`
       );
       cfg.seenWelcome = true;
       saveConfig(cfg);

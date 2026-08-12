@@ -28,12 +28,12 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.17</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.18</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard (same hotkey stops).
-    Hotkeys are remappable below. Voices: free SAPI · Pro managed neural · Developer BYO OpenAI.
-    Text replacements · auto-capitalize · sound cues · export history. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
+    Dictate anywhere → polish → paste. Highlight-to-speak reads selection or clipboard.
+    <strong style="color:var(--lime)">Polish selection</strong> rewrites highlighted text (Ctrl+Shift+P).
+    Hotkeys are remappable. Portable zip is unsigned — SmartScreen may warn; choose <em>More info → Run anyway</em>.
   </p>
   <div id="status">Ready</div>
 
@@ -52,8 +52,11 @@
 
   <label>Highlight-to-speak hotkey</label>
   <input id="hotkeyRead" placeholder="Ctrl+Shift+R" autocomplete="off" spellcheck="false" />
+
+  <label>Polish selection hotkey</label>
+  <input id="hotkeyPolish" placeholder="Ctrl+Shift+P" autocomplete="off" spellcheck="false" />
   <p class="hint" style="margin-top:6px">
-    Examples: <span class="kbd">Ctrl+Shift+Space</span>, <span class="kbd">Ctrl+Alt+D</span>, <span class="kbd">F8</span>.
+    Examples: <span class="kbd">Ctrl+Shift+Space</span>, <span class="kbd">Ctrl+Shift+P</span>, <span class="kbd">F8</span>.
     Save to apply. Conflicts with other apps may fail to bind.
   </p>
 
@@ -164,6 +167,7 @@
   <div class="row">
     <button id="toggle">Start dictation</button>
     <button id="read" class="ghost">Read selection</button>
+    <button id="polishSel" class="ghost">Polish selection</button>
     <button id="stopRead" class="ghost">Stop reading</button>
     <button id="save" class="ghost">Save</button>
     <button id="refreshPlan" class="ghost">Refresh plan</button>
@@ -262,6 +266,8 @@
         c.hotkeyDictateDisplay || c.hotkeyDictate || 'Ctrl+Shift+Space';
       document.getElementById('hotkeyRead').value =
         c.hotkeyReadDisplay || c.hotkeyRead || 'Ctrl+Shift+R';
+      document.getElementById('hotkeyPolish').value =
+        c.hotkeyPolishDisplay || c.hotkeyPolish || 'Ctrl+Shift+P';
       document.getElementById('sttMode').value = c.sttMode || 'webspeech';
       document.getElementById('sttLang').value = c.sttLang || 'en-US';
       document.getElementById('ttsEngine').value = c.ttsEngine || 'auto';
@@ -337,6 +343,7 @@
         })(),
         hotkeyDictate: document.getElementById('hotkeyDictate').value.trim() || 'Ctrl+Shift+Space',
         hotkeyRead: document.getElementById('hotkeyRead').value.trim() || 'Ctrl+Shift+R',
+        hotkeyPolish: document.getElementById('hotkeyPolish').value.trim() || 'Ctrl+Shift+P',
         sttMode: document.getElementById('sttMode').value || 'webspeech',
         sttLang: document.getElementById('sttLang').value || 'en-US',
         ttsEngine: document.getElementById('ttsEngine').value || 'auto',
@@ -353,6 +360,8 @@
         again.hotkeyDictateDisplay || again.hotkeyDictate || '';
       document.getElementById('hotkeyRead').value =
         again.hotkeyReadDisplay || again.hotkeyRead || '';
+      document.getElementById('hotkeyPolish').value =
+        again.hotkeyPolishDisplay || again.hotkeyPolish || '';
       document.getElementById('status').textContent = 'Saved · hotkeys applied';
       if (again.licenseKey) await refreshPlan();
     }
@@ -446,6 +455,15 @@
       await save();
       document.getElementById('status').textContent = 'Reading selection…';
       await window.dictaste.readSelection();
+    };
+    document.getElementById('polishSel').onclick = async () => {
+      await save();
+      document.getElementById('status').textContent = 'Polishing selection…';
+      const r = await window.dictaste.polishSelection();
+      document.getElementById('status').textContent = r?.ok
+        ? 'Polished selection · pasted'
+        : (r?.error === 'empty' ? 'Highlight text first' : (r?.error || 'Polish failed'));
+      if (r?.polished) document.getElementById('text').value = r.polished;
     };
     document.getElementById('stopRead').onclick = async () => {
       await window.dictaste.stopReading();

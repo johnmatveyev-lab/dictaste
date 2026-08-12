@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("dictaste", {
   exportHistory: () => ipcRenderer.invoke("export-history"),
   clearHistory: () => ipcRenderer.invoke("clear-history"),
   readSelection: () => ipcRenderer.invoke("read-selection"),
+  polishSelection: () => ipcRenderer.invoke("polish-selection"),
   stopReading: () => ipcRenderer.invoke("stop-reading"),
   openExternal: (u) => ipcRenderer.invoke("open-external", u),
   setListening: (on) => ipcRenderer.invoke("set-listening", on),
