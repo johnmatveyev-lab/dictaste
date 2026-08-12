@@ -386,6 +386,10 @@ if (/openUserDataFolder|Open data folder/.test(main)) pass("main open data folde
 else fail("main missing open data folder");
 if (/resetHotkeys|Reset hotkeys/.test(main)) pass("main reset hotkeys");
 else fail("main missing reset hotkeys");
+if (/rereadLast|Re-read last|speakReadText/.test(main)) pass("main re-read last");
+else fail("main missing re-read last");
+if (/function clearHistory|Clear history/.test(main)) pass("main clear history");
+else fail("main missing clear history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

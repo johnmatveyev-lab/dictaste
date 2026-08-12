@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Re-read last · clear history (tray)
  * - Tray app + lime brand icon
  * - Remappable global hotkeys (defaults Ctrl+Shift+Space / Ctrl+Shift+R)
  * - Web Speech STT in always-on-top HUD
@@ -565,6 +566,8 @@ let speakProc = null;
 let cfg = null;
 /** Last polished dictation (tray Copy last transcript) */
 let lastTranscript = "";
+/** Last highlight-to-speak text (re-read without re-capturing selection) */
+let lastReadText = "";
 /** Runtime: global hotkeys unbound until resumed (optionally persisted) */
 let hotkeysPaused = false;
 
@@ -939,7 +942,7 @@ async function captureSelectionText() {
   return "";
 }
 
-/** Toggle highlight-to-speak (Flow Read free path). */
+/** Toggle highlight-to-speak (selection / clipboard → TTS). */
 async function toggleFlowRead() {
   if (reading) {
     stopSpeaking();
@@ -964,16 +967,74 @@ async function toggleFlowRead() {
     );
     return;
   }
-  const preview = text.length > 60 ? text.slice(0, 57) + "…" : text;
-  // Keep selection available for "Copy last transcript" without treating as dictation history
-  lastTranscript = text;
-  rebuildTrayMenu();
-  notify(`Reading · ${preview}`);
-  try {
-    await speakText(text);
-  } catch (e) {
-    notify(`Read failed: ${e.message || e}`);
+  await speakReadText(text);
+}
+
+/**
+ * Speak arbitrary text as highlight-to-speak; remembers it for Re-read last.
+ */
+async function speakReadText(text) {
+  const t = String(text || "").trim();
+  if (!t) {
+    notify("Nothing to read", { force: true });
+    return { ok: false, error: "empty" };
   }
+  if (reading) {
+    stopSpeaking();
+    await sleep(80);
+  }
+  if (listening) {
+    await stopListening();
+    await sleep(200);
+  }
+  const preview = t.length > 60 ? t.slice(0, 57) + "…" : t;
+  const wc = countWords(t);
+  lastReadText = t;
+  // Also surface in "copy last" path without pushing dictation history
+  lastTranscript = t;
+  rebuildTrayMenu();
+  notify(
+    cfg?.showWordCount !== false
+      ? `Reading · ${wc} word${wc === 1 ? "" : "s"} · ${preview}`
+      : `Reading · ${preview}`
+  );
+  try {
+    await speakText(t);
+    return { ok: true, words: wc };
+  } catch (e) {
+    notify(`Read failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Re-speak the last highlight-to-speak payload without re-capturing selection.
+ */
+async function rereadLast() {
+  const t = String(lastReadText || lastTranscript || "").trim();
+  if (!t) {
+    notify(
+      `Nothing to re-read — highlight text and press ${toDisplayHotkey(hotkeyReadAccel())} first`,
+      { force: true }
+    );
+    return { ok: false, error: "empty" };
+  }
+  return speakReadText(t);
+}
+
+function clearHistory() {
+  const n = normalizeHistory(cfg?.history).length;
+  cfg = { ...cfg, history: [] };
+  lastTranscript = "";
+  // keep lastReadText so Re-read last still works after clearing dictation history
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  notify(n ? `History cleared (${n})` : "History already empty", { force: true });
+  return { ok: true, cleared: n };
 }
 
 /**
@@ -2242,6 +2303,13 @@ function rebuildTrayMenu() {
       click: () => stopSpeaking(),
     },
     {
+      label: "Re-read last",
+      enabled: !!String(lastReadText || lastTranscript || "").trim() && !hotkeysPaused,
+      click: () => {
+        rereadLast().catch(() => {});
+      },
+    },
+    {
       label: hotkeysPaused ? "Resume hotkeys" : "Pause hotkeys",
       click: () => setHotkeysPaused(!hotkeysPaused),
     },
@@ -2402,6 +2470,10 @@ function rebuildTrayMenu() {
             click: () => {
               importHistory().catch(() => {});
             },
+          },
+          {
+            label: "Clear history",
+            click: () => clearHistory(),
           },
         ];
       })(),
@@ -2579,13 +2651,8 @@ app.whenReady().then(() => {
   ipcMain.handle("set-stt-lang", (_e, lang) => setSttLang(lang));
   ipcMain.handle("set-case-mode", (_e, mode) => setCaseMode(mode));
   ipcMain.handle("set-hud-compact", (_e, on) => setHudCompact(!!on));
-  ipcMain.handle("clear-history", () => {
-    cfg = { ...cfg, history: [] };
-    lastTranscript = "";
-    saveConfig(cfg);
-    rebuildTrayMenu();
-    return true;
-  });
+  ipcMain.handle("clear-history", () => clearHistory());
+  ipcMain.handle("reread-last", async () => rereadLast());
   ipcMain.handle("get-hotkeys-paused", () => ({
     paused: hotkeysPaused,
     resumeAt: pauseResumeAt || null,

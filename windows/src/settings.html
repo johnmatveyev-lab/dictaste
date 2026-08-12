@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.30</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.31</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Skip AI polish for short phrases (saves quota). Open data folder · reset hotkeys.
+    Dictate · highlight-to-speak · polish selection. Re-read last · clear history from tray. Skip AI polish for short phrases (saves quota).
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -206,6 +206,7 @@
     <button id="read" class="ghost">Read selection</button>
     <button id="polishSel" class="ghost">Polish selection</button>
     <button id="stopRead" class="ghost">Stop reading</button>
+    <button id="rereadLast" class="ghost">Re-read last</button>
     <button id="save" class="ghost">Save</button>
     <button id="refreshPlan" class="ghost">Refresh plan</button>
     <button id="checkUpdates" class="ghost">Check updates</button>
@@ -230,7 +231,7 @@
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
     Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
-    Skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
+    Re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
     · Support: <a href="https://github.com/johnmatveyev-lab/dictaste/issues" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
@@ -703,6 +704,13 @@
     document.getElementById('stopRead').onclick = async () => {
       await window.dictaste.stopReading();
       document.getElementById('status').textContent = 'Stopped reading';
+    };
+    document.getElementById('rereadLast').onclick = async () => {
+      document.getElementById('status').textContent = 'Re-reading last…';
+      const r = await window.dictaste.rereadLast();
+      document.getElementById('status').textContent = r?.ok
+        ? 'Re-reading last selection'
+        : (r?.error === 'empty' ? 'Nothing to re-read yet' : (r?.error || 'Re-read failed'));
     };
     document.getElementById('run').onclick = async () => {
       await save();
