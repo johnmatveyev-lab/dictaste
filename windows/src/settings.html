@@ -194,6 +194,16 @@
     <button type="button" id="hashMd5" class="ghost">MD5</button>
   </div>
 
+  <label>Number lines last <span style="font-weight:400;color:var(--muted)">(1. · 1) · 01. · strip · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="numberDot" class="ghost">1. 2. 3.</button>
+    <button type="button" id="numberParen" class="ghost">1) 2) 3)</button>
+    <button type="button" id="numberPad" class="ghost">01. 02.</button>
+    <button type="button" id="numberPlain" class="ghost">1 [tab]</button>
+    <button type="button" id="numberZero" class="ghost">0. 1. 2.</button>
+    <button type="button" id="numberStrip" class="ghost">Strip numbers</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1162,6 +1172,20 @@
     document.getElementById('hashSha256Lines').onclick = () => hashNow('sha256-lines');
     document.getElementById('hashSha1').onclick = () => hashNow('sha1');
     document.getElementById('hashMd5').onclick = () => hashNow('md5');
+    async function numberLinesNow(kind) {
+      const r = await window.dictaste.numberLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Number lines failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('numberDot').onclick = () => numberLinesNow('dot');
+    document.getElementById('numberParen').onclick = () => numberLinesNow('paren');
+    document.getElementById('numberPad').onclick = () => numberLinesNow('pad');
+    document.getElementById('numberPlain').onclick = () => numberLinesNow('plain');
+    document.getElementById('numberZero').onclick = () => numberLinesNow('zero');
+    document.getElementById('numberStrip').onclick = () => numberLinesNow('strip');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

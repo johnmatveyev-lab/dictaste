@@ -3743,6 +3743,94 @@ function hashLast(kind = "sha256") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Number / un-number lines of last transcript.
+ * @param {"dot"|"paren"|"pad"|"plain"|"zero"|"strip"} kind
+ */
+function numberLinesText(raw, kind = "dot") {
+  const t = String(raw || "").replace(/\r\n/g, "\n");
+  if (!t.trim()) return "";
+  let lines = t.split("\n");
+  const hadTrailing = lines.length > 1 && lines[lines.length - 1] === "";
+  if (hadTrailing) lines = lines.slice(0, -1);
+  const stripNum = (line) =>
+    line.replace(/^\s*(?:\d+[.)]\s+|\[\d+\]\s+|\d+\s+)/, "");
+  if (String(kind || "dot") === "strip") {
+    return lines.map(stripNum).join("\n");
+  }
+  // Only number non-empty lines; preserve blank separators
+  let n = String(kind) === "zero" ? 0 : 1;
+  const total = lines.filter((l) => l.trim()).length;
+  const width = String(Math.max(total + (String(kind) === "zero" ? -1 : 0), 1)).length;
+  const out = lines.map((line) => {
+    if (!line.trim()) return line;
+    const body = stripNum(line);
+    let prefix;
+    switch (String(kind || "dot")) {
+      case "paren":
+        prefix = n + ") ";
+        break;
+      case "pad":
+        prefix = String(n).padStart(width, "0") + ". ";
+        break;
+      case "plain":
+        prefix = n + "\t";
+        break;
+      case "zero":
+        prefix = n + ". ";
+        break;
+      case "dot":
+      default:
+        prefix = n + ". ";
+        break;
+    }
+    n += 1;
+    return prefix + body;
+  });
+  return out.join("\n");
+}
+
+/**
+ * Number lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function numberLinesLast(kind = "dot") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to number", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = numberLinesText(src, kind);
+  if (!text) {
+    notify("Number lines produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4977,6 +5065,18 @@ function rebuildTrayMenu() {
         { label: "MD5", click: () => hashLast("md5") },
       ],
     },
+    {
+      label: "Number lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "1. 2. 3.", click: () => numberLinesLast("dot") },
+        { label: "1) 2) 3)", click: () => numberLinesLast("paren") },
+        { label: "01. 02. 03.", click: () => numberLinesLast("pad") },
+        { label: "1 [tab] …", click: () => numberLinesLast("plain") },
+        { label: "0. 1. 2.", click: () => numberLinesLast("zero") },
+        { label: "Strip numbers", click: () => numberLinesLast("strip") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5254,6 +5354,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "sha256"),
       text: hashText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("number-lines-last", (_e, kind) =>
+    numberLinesLast(String(kind || "dot"))
+  );
+  ipcMain.handle("number-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "dot"),
+      text: numberLinesText(src, kind),
       source: src,
     };
   });

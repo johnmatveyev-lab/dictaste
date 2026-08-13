@@ -560,6 +560,15 @@ if (/id="hashSha256"|hashLast|Hash last/i.test(settings))
 else fail("settings missing hash last");
 if (/hashLast|hashPreview/.test(preload)) pass("preload hash last");
 else fail("preload missing hash last");
+if (/numberLinesLast|numberLinesText|Number lines last/.test(main))
+  pass("main number lines last");
+else fail("main missing number lines last");
+if (/id="numberDot"|numberLinesLast|Number lines last/i.test(settings))
+  pass("settings number lines last");
+else fail("settings missing number lines last");
+if (/numberLinesLast|numberLinesPreview/.test(preload))
+  pass("preload number lines last");
+else fail("preload missing number lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
