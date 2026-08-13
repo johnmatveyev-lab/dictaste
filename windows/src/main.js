@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Pin history items (stay on top · survive clear of recents)
  * - Edit history item · read history aloud (TTS)
  * - History search · copy all history · tray plan/usage · delete item
  * - Sticky HUD position · tray TTS rate presets
@@ -215,6 +216,11 @@ function defaultConfig() {
     historyMax: 25,
     /** Last polished dictations (newest first) */
     history: [],
+    /**
+     * Pinned transcripts (shown first; not capped by historyMax recents).
+     * Max 10. Survive “clear recents”; removed by unpin/delete/clear all.
+     */
+    pinnedHistory: [],
   };
 }
 
@@ -312,7 +318,7 @@ function registerHotkeys() {
     cancelDictation();
   });
   const okL = globalShortcut.register(pasteLast, () => {
-    pasteLastTranscript();
+    pasteLastTranscript(0, { latest: true });
   });
   if (!okD) {
     notify(`Could not bind dictate hotkey (${toDisplayHotkey(dict)}) — try another in Settings`);
@@ -1072,19 +1078,36 @@ async function rereadLast() {
   return speakReadText(t);
 }
 
-function clearHistory() {
-  const n = normalizeHistory(cfg?.history).length;
-  cfg = { ...cfg, history: [] };
+function clearHistory({ includePins = false } = {}) {
+  const pinned = normalizePinned(cfg?.pinnedHistory);
+  const recents = normalizeHistory(cfg?.history);
+  if (!includePins) {
+    if (!recents.length) {
+      notify(
+        pinned.length
+          ? `Recents empty · ${pinned.length} pin${pinned.length === 1 ? "" : "s"} kept`
+          : "History already empty",
+        { force: true }
+      );
+      return { ok: true, cleared: 0, pinsKept: pinned.length };
+    }
+    lastTranscript = pinned[0] || "";
+    persistHistoryStores(pinned, []);
+    notify(
+      `Cleared ${recents.length} recent${recents.length === 1 ? "" : "s"}` +
+        (pinned.length
+          ? ` · ${pinned.length} pin${pinned.length === 1 ? "" : "s"} kept`
+          : ""),
+      { force: true }
+    );
+    return { ok: true, cleared: recents.length, pinsKept: pinned.length };
+  }
+  const n = recents.length + pinned.length;
   lastTranscript = "";
   // keep lastReadText so Re-read last still works after clearing dictation history
-  try {
-    saveConfig(cfg);
-  } catch {
-    /* ignore */
-  }
-  rebuildTrayMenu();
+  persistHistoryStores([], []);
   notify(n ? `History cleared (${n})` : "History already empty", { force: true });
-  return { ok: true, cleared: n };
+  return { ok: true, cleared: n, pinsKept: 0 };
 }
 
 /**
@@ -1579,6 +1602,8 @@ function historyMaxClamped() {
   return Math.max(10, Math.min(50, Math.round(n)));
 }
 
+const PINNED_HISTORY_MAX = 10;
+
 function normalizeHistory(list) {
   if (!Array.isArray(list)) return [];
   const max = historyMaxClamped();
@@ -1588,14 +1613,38 @@ function normalizeHistory(list) {
     .slice(0, max);
 }
 
-function pushHistory(text) {
-  const t = String(text || "").trim();
-  if (!t) return;
-  lastTranscript = t;
-  const max = historyMaxClamped();
-  const prev = normalizeHistory(cfg?.history);
-  const next = [t, ...prev.filter((x) => x !== t)].slice(0, max);
-  cfg = { ...cfg, history: next };
+function normalizePinned(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, PINNED_HISTORY_MAX);
+}
+
+/**
+ * Display order: pins first, then recent (newest first). Pins never appear twice.
+ * @returns {{ text: string, pinned: boolean }[]}
+ */
+function flatHistory() {
+  const pinned = normalizePinned(cfg?.pinnedHistory);
+  const pinnedSet = new Set(pinned);
+  const recents = normalizeHistory(cfg?.history).filter((t) => !pinnedSet.has(t));
+  return [
+    ...pinned.map((text) => ({ text, pinned: true })),
+    ...recents.map((text) => ({ text, pinned: false })),
+  ];
+}
+
+function flatTexts() {
+  return flatHistory().map((x) => x.text);
+}
+
+function persistHistoryStores(pinned, history) {
+  cfg = {
+    ...cfg,
+    pinnedHistory: normalizePinned(pinned),
+    history: normalizeHistory(history),
+  };
   try {
     saveConfig(cfg);
   } catch {
@@ -1604,9 +1653,30 @@ function pushHistory(text) {
   rebuildTrayMenu();
 }
 
+function pushHistory(text) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  lastTranscript = t;
+  const pinned = normalizePinned(cfg?.pinnedHistory);
+  // Keep pin if already pinned; still set as last transcript
+  if (pinned.includes(t)) {
+    try {
+      saveConfig(cfg);
+    } catch {
+      /* ignore */
+    }
+    rebuildTrayMenu();
+    return;
+  }
+  const max = historyMaxClamped();
+  const prev = normalizeHistory(cfg?.history);
+  const next = [t, ...prev.filter((x) => x !== t)].slice(0, max);
+  persistHistoryStores(pinned, next);
+}
+
 /**
- * Remove the newest history entry and restore lastTranscript to the prior one.
- * Does not reverse paste into the focused app (use Ctrl+Z there).
+ * Remove the newest unpinned dictation and restore lastTranscript to the prior one.
+ * Does not reverse paste into the focused app (use Ctrl+Z there). Pins untouched.
  */
 function undoLastDictation() {
   const hist = normalizeHistory(cfg?.history);
@@ -1616,15 +1686,8 @@ function undoLastDictation() {
   }
   const removed = hist[0] || lastTranscript || "";
   const next = hist.slice(1);
-  lastTranscript = next[0] || "";
-  // If append mode had merged into removed, user still has prior segment as lastTranscript
-  cfg = { ...cfg, history: next };
-  try {
-    saveConfig(cfg);
-  } catch {
-    /* ignore */
-  }
-  rebuildTrayMenu();
+  lastTranscript = next[0] || normalizePinned(cfg?.pinnedHistory)[0] || "";
+  persistHistoryStores(cfg?.pinnedHistory, next);
   const preview = String(removed).trim();
   notify(
     preview
@@ -1635,35 +1698,34 @@ function undoLastDictation() {
   return {
     ok: true,
     removed: preview,
-    remaining: next.length,
+    remaining: flatTexts().length,
     lastTranscript,
   };
 }
 
 /**
- * Remove a single history entry by index (0 = newest).
+ * Remove a single history entry by flat index (pins first, then recents).
  */
 function deleteHistoryAt(index = 0) {
   const i = Math.max(0, Math.floor(Number(index) || 0));
-  const hist = normalizeHistory(cfg?.history);
-  if (!hist.length || i >= hist.length) {
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
     notify("No history item to delete", { force: true });
     return { ok: false, error: "empty" };
   }
-  const removed = hist[i];
-  const next = hist.filter((_, idx) => idx !== i);
-  if (i === 0) {
-    lastTranscript = next[0] || "";
-  } else if (String(lastTranscript || "").trim() === String(removed || "").trim()) {
-    lastTranscript = next[0] || "";
+  const removed = items[i].text;
+  const wasPinned = items[i].pinned;
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (wasPinned) {
+    pinned = pinned.filter((x) => x !== removed);
+  } else {
+    hist = hist.filter((x) => x !== removed);
   }
-  cfg = { ...cfg, history: next };
-  try {
-    saveConfig(cfg);
-  } catch {
-    /* ignore */
+  if (String(lastTranscript || "").trim() === String(removed || "").trim()) {
+    lastTranscript = hist[0] || pinned[0] || "";
   }
-  rebuildTrayMenu();
+  persistHistoryStores(pinned, hist);
   const preview = String(removed || "").trim();
   notify(
     preview
@@ -1671,32 +1733,32 @@ function deleteHistoryAt(index = 0) {
       : "Deleted history item",
     { force: true }
   );
-  return { ok: true, removed: preview, remaining: next.length };
+  return { ok: true, removed: preview, remaining: flatTexts().length };
 }
 
 function copyAllHistory() {
-  const hist = normalizeHistory(cfg?.history);
-  if (!hist.length) {
+  const items = flatHistory();
+  if (!items.length) {
     notify("No history to copy", { force: true });
     return { ok: false, error: "empty" };
   }
-  const text = hist
-    .map((s, i) => `${i + 1}. ${s}`)
+  const text = items
+    .map((x, i) => `${i + 1}.${x.pinned ? " ★" : ""} ${x.text}`)
     .join("\n\n");
   clipboard.writeText(text);
-  notify(`Copied ${hist.length} transcript${hist.length === 1 ? "" : "s"}`, {
+  notify(`Copied ${items.length} transcript${items.length === 1 ? "" : "s"}`, {
     force: true,
   });
-  return { ok: true, count: hist.length };
+  return { ok: true, count: items.length };
 }
 
 /**
- * Replace a history entry in place (0 = newest). Empty text deletes the item.
+ * Replace a history entry in place (flat index). Empty text deletes the item.
  */
 function updateHistoryAt(index = 0, text = "") {
   const i = Math.max(0, Math.floor(Number(index) || 0));
-  const hist = normalizeHistory(cfg?.history);
-  if (!hist.length || i >= hist.length) {
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
     notify("No history item to edit", { force: true });
     return { ok: false, error: "empty" };
   }
@@ -1704,22 +1766,78 @@ function updateHistoryAt(index = 0, text = "") {
   if (!nextText) {
     return deleteHistoryAt(i);
   }
-  const next = hist.slice();
-  next[i] = nextText;
-  if (i === 0 || String(lastTranscript || "").trim() === String(hist[i] || "").trim()) {
+  const prev = items[i];
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (prev.pinned) {
+    pinned = pinned.map((x) => (x === prev.text ? nextText : x));
+    // de-dupe if nextText already pinned elsewhere
+    const seen = new Set();
+    pinned = pinned.filter((x) => {
+      if (seen.has(x)) return false;
+      seen.add(x);
+      return true;
+    });
+    hist = hist.filter((x) => x !== nextText);
+  } else {
+    hist = hist.map((x) => (x === prev.text ? nextText : x));
+    const seen = new Set();
+    hist = hist.filter((x) => {
+      if (seen.has(x)) return false;
+      seen.add(x);
+      return true;
+    });
+  }
+  if (
+    String(lastTranscript || "").trim() === String(prev.text || "").trim() ||
+    i === items.findIndex((x) => !x.pinned)
+  ) {
     lastTranscript = nextText;
   }
-  cfg = { ...cfg, history: next };
-  try {
-    saveConfig(cfg);
-  } catch {
-    /* ignore */
-  }
-  rebuildTrayMenu();
+  persistHistoryStores(pinned, hist);
   const preview =
     nextText.length > 48 ? nextText.slice(0, 45) + "…" : nextText;
   notify(`Updated history #${i + 1} · ${preview}`, { force: true });
-  return { ok: true, index: i, text: nextText, remaining: next.length };
+  return { ok: true, index: i, text: nextText, remaining: flatTexts().length };
+}
+
+/**
+ * Toggle pin on a flat-index history item. Pins float to top and survive clear-recents.
+ */
+function pinHistoryAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
+    notify("No history item to pin", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const item = items[i];
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (item.pinned) {
+    pinned = pinned.filter((x) => x !== item.text);
+    hist = [item.text, ...hist.filter((x) => x !== item.text)].slice(
+      0,
+      historyMaxClamped()
+    );
+    persistHistoryStores(pinned, hist);
+    notify("Unpinned from top", { force: true });
+    return { ok: true, pinned: false, text: item.text, remaining: flatTexts().length };
+  }
+  if (pinned.length >= PINNED_HISTORY_MAX && !pinned.includes(item.text)) {
+    notify(`Pin limit ${PINNED_HISTORY_MAX} — unpin one first`, { force: true });
+    return { ok: false, error: "limit" };
+  }
+  pinned = [item.text, ...pinned.filter((x) => x !== item.text)].slice(
+    0,
+    PINNED_HISTORY_MAX
+  );
+  hist = hist.filter((x) => x !== item.text);
+  persistHistoryStores(pinned, hist);
+  const preview =
+    item.text.length > 48 ? item.text.slice(0, 45) + "…" : item.text;
+  notify(`Pinned · ${preview}`, { force: true });
+  return { ok: true, pinned: true, text: item.text, remaining: flatTexts().length };
 }
 
 /**
@@ -1727,9 +1845,9 @@ function updateHistoryAt(index = 0, text = "") {
  */
 async function speakHistoryAt(index = 0) {
   const i = Math.max(0, Math.floor(Number(index) || 0));
-  const hist = normalizeHistory(cfg?.history);
+  const items = flatHistory();
   const t = String(
-    hist[i] || (i === 0 ? lastTranscript : "") || ""
+    items[i]?.text || (i === 0 ? lastTranscript : "") || ""
   ).trim();
   if (!t) {
     notify("No history item to read", { force: true });
@@ -1777,12 +1895,24 @@ async function refreshPlanCache({ rebuild = true, force = false } = {}) {
   return cachedPlanLabel;
 }
 
-function copyLastTranscript(index = 0) {
-
+/** Prefer last dictation, then newest unpinned, then first pin. */
+function latestTranscriptText() {
+  const last = String(lastTranscript || "").trim();
+  if (last) return last;
   const hist = normalizeHistory(cfg?.history);
-  const t = String(
-    hist[index] || (index === 0 ? lastTranscript : "") || ""
-  ).trim();
+  if (hist[0]) return hist[0];
+  const pin = normalizePinned(cfg?.pinnedHistory);
+  return pin[0] || "";
+}
+
+function historyTextAt(index = 0, { latest = false } = {}) {
+  if (latest) return latestTranscriptText();
+  const texts = flatTexts();
+  return String(texts[index] || "").trim();
+}
+
+function copyLastTranscript(index = 0, opts = {}) {
+  const t = historyTextAt(index, opts);
   if (!t) {
     notify("No transcript yet — dictate first", { force: true });
     return false;
@@ -1798,12 +1928,10 @@ function copyLastTranscript(index = 0) {
 /**
  * Re-paste last (or indexed) transcript into the focused app.
  * Uses same auto-paste / clipboard-only rules as live dictation.
+ * Pass { latest: true } for hotkey / “paste last” (ignores pin order).
  */
-function pasteLastTranscript(index = 0) {
-  const hist = normalizeHistory(cfg?.history);
-  const t = String(
-    hist[index] || (index === 0 ? lastTranscript : "") || ""
-  ).trim();
+function pasteLastTranscript(index = 0, opts = {}) {
+  const t = historyTextAt(index, opts);
   if (!t) {
     notify("No transcript yet — dictate first", { force: true });
     return { ok: false, error: "empty" };
@@ -1820,11 +1948,8 @@ function pasteLastTranscript(index = 0) {
  * Re-run polish pipeline on last (or indexed) transcript and paste result.
  * Useful when the first polish was weak or offline cleanup-only.
  */
-async function repolishLast(index = 0) {
-  const hist = normalizeHistory(cfg?.history);
-  const raw = String(
-    hist[index] || (index === 0 ? lastTranscript : "") || ""
-  ).trim();
+async function repolishLast(index = 0, opts = {}) {
+  const raw = historyTextAt(index, opts);
   if (!raw) {
     notify("No transcript yet — dictate first", { force: true });
     return { ok: false, error: "empty" };
@@ -1889,7 +2014,7 @@ function copySupportDiagnostics() {
     `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
     `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · append: ${cfg?.appendDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
-    `History: ${normalizeHistory(cfg?.history).length}/${historyMaxClamped()}`,
+    `History: ${flatTexts().length} (${normalizePinned(cfg?.pinnedHistory).length}★ / ${historyMaxClamped()} recents)`,
     `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
     `Site: https://dictaste.vercel.app · Issues: https://github.com/johnmatveyev-lab/dictaste/issues`,
   ];
@@ -2526,8 +2651,8 @@ async function stopListening() {
 }
 
 function exportHistory() {
-  const hist = normalizeHistory(cfg?.history);
-  if (!hist.length) {
+  const items = flatHistory();
+  if (!items.length) {
     notify("No transcripts to export yet", { force: true });
     return { ok: false, error: "empty" };
   }
@@ -2535,13 +2660,15 @@ function exportHistory() {
   const dest = path.join(app.getPath("documents"), `Dictaste-history-${stamp}.txt`);
   const body =
     `# Dictaste recent transcripts\n# ${new Date().toISOString()}\n\n` +
-    hist.map((t, i) => `${i + 1}. ${t}`).join("\n\n") +
+    items
+      .map((x, i) => `${i + 1}.${x.pinned ? " ★" : ""} ${x.text}`)
+      .join("\n\n") +
     "\n";
   try {
     fs.writeFileSync(dest, body, "utf8");
     shell.showItemInFolder(dest);
-    notify(`Exported ${hist.length} transcripts`, { force: true });
-    return { ok: true, path: dest, count: hist.length };
+    notify(`Exported ${items.length} transcripts`, { force: true });
+    return { ok: true, path: dest, count: items.length };
   } catch (e) {
     notify(`Export failed: ${e.message || e}`, { force: true });
     return { ok: false, error: String(e.message || e) };
@@ -2828,14 +2955,14 @@ function rebuildTrayMenu() {
     {
       label: "Copy last transcript",
       enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
-      click: () => copyLastTranscript(0),
+      click: () => copyLastTranscript(0, { latest: true }),
     },
     {
       label: `Paste last transcript (${toDisplayHotkey(hotkeyPasteLastAccel())})`,
       enabled:
         !!String(lastTranscript || cfg?.history?.[0] || "").trim() &&
         !hotkeysPaused,
-      click: () => pasteLastTranscript(0),
+      click: () => pasteLastTranscript(0, { latest: true }),
     },
     {
       label: "Re-polish last",
@@ -2843,7 +2970,7 @@ function rebuildTrayMenu() {
         !!String(lastTranscript || cfg?.history?.[0] || "").trim() &&
         !hotkeysPaused,
       click: () => {
-        repolishLast(0).catch(() => {});
+        repolishLast(0, { latest: true }).catch(() => {});
       },
     },
     {
@@ -3028,67 +3155,82 @@ function rebuildTrayMenu() {
       click: () => resetHotkeys(),
     },
     {
-      label: `Recent transcripts (${normalizeHistory(cfg?.history).length}/${historyMaxClamped()})`,
-      enabled: normalizeHistory(cfg?.history).length > 0,
+      label: `Recent transcripts (${flatTexts().length}/${historyMaxClamped()}${
+        normalizePinned(cfg?.pinnedHistory).length
+          ? ` · ${normalizePinned(cfg?.pinnedHistory).length}★`
+          : ""
+      })`,
+      enabled: flatTexts().length > 0,
       submenu: (() => {
-        const hist = normalizeHistory(cfg?.history);
-        if (!hist.length) {
+        const items = flatHistory();
+        if (!items.length) {
           return [{ label: "(empty)", enabled: false }];
         }
         return [
-          ...hist.map((t, i) => ({
-            label: (t.length > 42 ? t.slice(0, 39) + "…" : t).replace(/\s+/g, " "),
-            submenu: [
-              {
-                label: "Paste into focused app",
-                enabled: !hotkeysPaused,
-                click: () => pasteLastTranscript(i),
-              },
-              {
-                label: "Copy to clipboard",
-                click: () => copyLastTranscript(i),
-              },
-              {
-                label: "Read aloud",
-                click: () => {
-                  speakHistoryAt(i).catch(() => {});
+          ...items.map((item, i) => {
+            const t = item.text;
+            const labelBase = (t.length > 40 ? t.slice(0, 37) + "…" : t).replace(
+              /\s+/g,
+              " "
+            );
+            return {
+              label: (item.pinned ? "★ " : "") + labelBase,
+              submenu: [
+                {
+                  label: "Paste into focused app",
+                  enabled: !hotkeysPaused,
+                  click: () => pasteLastTranscript(i),
                 },
-              },
-              {
-                label: "Edit in Settings…",
-                click: () => {
-                  openSettings();
-                  try {
-                    if (settingsWin && !settingsWin.isDestroyed()) {
-                      settingsWin.webContents.send("status", {
-                        phase: "idle",
-                        editHistoryIndex: i,
-                        editHistoryText: t,
-                      });
+                {
+                  label: "Copy to clipboard",
+                  click: () => copyLastTranscript(i),
+                },
+                {
+                  label: "Read aloud",
+                  click: () => {
+                    speakHistoryAt(i).catch(() => {});
+                  },
+                },
+                {
+                  label: item.pinned ? "Unpin" : "Pin to top",
+                  click: () => pinHistoryAt(i),
+                },
+                {
+                  label: "Edit in Settings…",
+                  click: () => {
+                    openSettings();
+                    try {
+                      if (settingsWin && !settingsWin.isDestroyed()) {
+                        settingsWin.webContents.send("status", {
+                          phase: "idle",
+                          editHistoryIndex: i,
+                          editHistoryText: t,
+                        });
+                      }
+                    } catch {
+                      /* ignore */
                     }
-                  } catch {
-                    /* ignore */
-                  }
+                  },
                 },
-              },
-              {
-                label: "Re-polish & paste",
-                enabled: !hotkeysPaused,
-                click: () => {
-                  repolishLast(i).catch(() => {});
+                {
+                  label: "Re-polish & paste",
+                  enabled: !hotkeysPaused,
+                  click: () => {
+                    repolishLast(i).catch(() => {});
+                  },
                 },
-              },
-              {
-                label: "Delete from history",
-                click: () => deleteHistoryAt(i),
-              },
-            ],
-          })),
+                {
+                  label: "Delete from history",
+                  click: () => deleteHistoryAt(i),
+                },
+              ],
+            };
+          }),
           { type: "separator" },
           {
             label: "Paste latest",
             enabled: !hotkeysPaused,
-            click: () => pasteLastTranscript(0),
+            click: () => pasteLastTranscript(0, { latest: true }),
           },
           {
             label: "Copy all history",
@@ -3110,8 +3252,12 @@ function rebuildTrayMenu() {
             click: () => undoLastDictation(),
           },
           {
-            label: "Clear history",
-            click: () => clearHistory(),
+            label: "Clear recents (keep pins)",
+            click: () => clearHistory({ includePins: false }),
+          },
+          {
+            label: "Clear all history",
+            click: () => clearHistory({ includePins: true }),
           },
         ];
       })(),
@@ -3278,15 +3424,24 @@ app.whenReady().then(() => {
   ipcMain.handle("check-for-updates", async () => checkForUpdates());
   ipcMain.handle("list-sapi-voices", async () => listSapiVoices());
   ipcMain.handle("test-voice", async () => testVoice());
-  ipcMain.handle("copy-last-transcript", (_e, index) =>
-    copyLastTranscript(Number(index) || 0)
+  ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
+    copyLastTranscript(
+      Number(index) || 0,
+      opts && typeof opts === "object" ? opts : {}
+    )
   );
-  ipcMain.handle("paste-last-transcript", (_e, index) =>
-    pasteLastTranscript(Number(index) || 0)
+  ipcMain.handle("paste-last-transcript", (_e, index, opts) =>
+    pasteLastTranscript(
+      Number(index) || 0,
+      opts && typeof opts === "object" ? opts : {}
+    )
   );
   ipcMain.handle("cancel-dictation", () => cancelDictation());
-  ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
+  ipcMain.handle("get-history", () => flatHistory());
   ipcMain.handle("copy-all-history", () => copyAllHistory());
+  ipcMain.handle("pin-history-at", (_e, index) =>
+    pinHistoryAt(Number(index) || 0)
+  );
   ipcMain.handle("refresh-plan", async () => {
     const label = await refreshPlanCache({ rebuild: true, force: true });
     return { ok: true, label: cachedPlanLabel, planLabel: label };
@@ -3312,7 +3467,9 @@ app.whenReady().then(() => {
     if (!labels[key]) return { ok: false, error: "unknown" };
     return setConfigFlag(key, on, labels[key]);
   });
-  ipcMain.handle("clear-history", () => clearHistory());
+  ipcMain.handle("clear-history", (_e, opts) =>
+    clearHistory(opts && typeof opts === "object" ? opts : {})
+  );
   ipcMain.handle("reread-last", async () => rereadLast());
   ipcMain.handle("undo-last-dictation", () => undoLastDictation());
   ipcMain.handle("delete-history-at", (_e, index) =>

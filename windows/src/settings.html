@@ -202,10 +202,10 @@
   <label>History size <span id="historyMaxVal" style="color:var(--lime)">25</span> (10–50 · tray paste/copy each)</label>
   <input id="historyMax" type="range" min="10" max="50" step="5" value="25" style="width:100%;accent-color:var(--lime);" />
 
-  <label>Recent transcripts (click = paste · Shift-click = copy · Alt-click = read · filter below)</label>
+  <label>Recent transcripts (pins on top · click = paste · Shift = copy · Alt = read · filter below)</label>
   <input id="historyFilter" placeholder="Filter history…" autocomplete="off" spellcheck="false" style="width:100%;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:10px 12px;font:inherit;" />
   <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
-    Dictate once to build history. Click paste · Shift copy · Alt read · ✎ edit · ✕ delete.
+    Dictate once to build history. Click paste · Shift copy · Alt read · ★ pin · ✎ edit · ✕ delete.
   </div>
   <div id="historyEditBar" class="hint" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid rgba(200,245,66,0.35);border-radius:10px;background:rgba(200,245,66,0.08);">
     <div style="font-weight:600;color:var(--lime);margin-bottom:6px;">Editing history #<span id="historyEditIndexLabel">1</span></div>
@@ -508,14 +508,24 @@
       } catch {
         hist = [];
       }
+      // Support legacy string[] and {text,pinned}[]
+      const normalized = hist.map((h, i) => {
+        if (h && typeof h === 'object') {
+          return {
+            t: String(h.text || ''),
+            pinned: !!h.pinned,
+            i,
+          };
+        }
+        return { t: String(h || ''), pinned: false, i };
+      });
       const q = (document.getElementById('historyFilter')?.value || '').trim().toLowerCase();
-      const indexed = hist.map((t, i) => ({ t, i }));
       const shown = q
-        ? indexed.filter(({ t }) => String(t).toLowerCase().includes(q))
-        : indexed;
-      if (!hist.length) {
+        ? normalized.filter(({ t }) => String(t).toLowerCase().includes(q))
+        : normalized;
+      if (!normalized.length) {
         el.textContent =
-          'Dictate once to build history. Click paste · Shift copy · Alt read · ✎ edit · ✕ delete.';
+          'Dictate once to build history. Click paste · Shift copy · Alt read · ★ pin · ✎ edit · ✕ delete.';
         return;
       }
       if (!shown.length) {
@@ -523,15 +533,20 @@
         return;
       }
       el.innerHTML = '';
-      shown.forEach(({ t, i }) => {
+      shown.forEach(({ t, i, pinned }) => {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;margin:0 0 6px;';
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'ghost';
         row.style.cssText =
-          'flex:1;text-align:left;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;';
-        row.textContent = (i + 1) + '. ' + (t.length > 140 ? t.slice(0, 137) + '…' : t);
+          'flex:1;text-align:left;font-weight:500;font-size:0.8rem;white-space:normal;line-height:1.35;' +
+          (pinned ? 'border-color:rgba(200,245,66,0.45);' : '');
+        row.textContent =
+          (i + 1) +
+          '. ' +
+          (pinned ? '★ ' : '') +
+          (t.length > 140 ? t.slice(0, 137) + '…' : t);
         row.title = 'Click to paste · Shift+click copy · Alt+click read aloud';
         row.onclick = async (ev) => {
           document.getElementById('text').value = t;
@@ -549,6 +564,21 @@
               ? (r.deliver === 'clipboard' ? 'On clipboard · transcript #' + (i + 1) : 'Pasted transcript #' + (i + 1))
               : (r?.error || 'Paste failed');
           }
+        };
+        const pinBtn = document.createElement('button');
+        pinBtn.type = 'button';
+        pinBtn.className = 'ghost';
+        pinBtn.style.cssText =
+          'flex-shrink:0;padding:6px 10px;font-size:0.75rem;' +
+          (pinned ? 'color:var(--lime);' : '');
+        pinBtn.textContent = pinned ? '★' : '☆';
+        pinBtn.title = pinned ? 'Unpin' : 'Pin to top';
+        pinBtn.onclick = async () => {
+          const r = await window.dictaste.pinHistoryAt(i);
+          document.getElementById('status').textContent = r?.ok
+            ? (r.pinned ? 'Pinned #' + (i + 1) : 'Unpinned #' + (i + 1))
+            : (r?.error || 'Pin failed');
+          await renderHistory();
         };
         const speakBtn = document.createElement('button');
         speakBtn.type = 'button';
@@ -585,6 +615,7 @@
           await renderHistory();
         };
         wrap.appendChild(row);
+        wrap.appendChild(pinBtn);
         wrap.appendChild(speakBtn);
         wrap.appendChild(editBtn);
         wrap.appendChild(del);
@@ -736,11 +767,11 @@
       document.getElementById('status').textContent = 'Edit canceled';
     };
     document.getElementById('copyLast').onclick = async () => {
-      const ok = await window.dictaste.copyLastTranscript(0);
+      const ok = await window.dictaste.copyLastTranscript(0, { latest: true });
       document.getElementById('status').textContent = ok ? 'Copied last transcript' : 'No transcript yet';
     };
     document.getElementById('pasteLast').onclick = async () => {
-      const r = await window.dictaste.pasteLastTranscript(0);
+      const r = await window.dictaste.pasteLastTranscript(0, { latest: true });
       document.getElementById('status').textContent = r?.ok
         ? (r.deliver === 'clipboard' ? 'Last transcript on clipboard' : 'Pasted last transcript')
         : (r?.error === 'empty' ? 'No transcript yet' : (r?.error || 'Paste last failed'));
@@ -838,11 +869,21 @@
           r?.error === 'canceled' ? 'Import canceled' : (r?.error || 'Import failed');
       }
     };
-    document.getElementById('clearHistory').onclick = async () => {
-      await window.dictaste.clearHistory();
+    document.getElementById('clearHistory').onclick = async (ev) => {
+      // Default: clear recents, keep pins. Shift+click clears pins too.
+      const includePins = !!(ev && ev.shiftKey);
+      const r = await window.dictaste.clearHistory({ includePins });
+      closeHistoryEdit();
       await renderHistory();
-      document.getElementById('status').textContent = 'History cleared';
+      document.getElementById('status').textContent = r?.ok
+        ? (includePins
+          ? ('Cleared all (' + (r.cleared || 0) + ')')
+          : ('Cleared recents (' + (r.cleared || 0) + ')' +
+            (r.pinsKept ? ' · ' + r.pinsKept + ' pin(s) kept' : '')))
+        : (r?.error || 'Clear failed');
     };
+    document.getElementById('clearHistory').title =
+      'Clear recents (pins kept). Shift+click clears pins too.';
     document.getElementById('save').onclick = save;
     document.getElementById('refreshPlan').onclick = async () => {
       await save();

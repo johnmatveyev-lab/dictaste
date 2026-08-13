@@ -432,6 +432,12 @@ if (/historyEditBar|historyEditSave|speakHistoryAt|updateHistoryAt/i.test(settin
 else fail("settings missing edit/speak history");
 if (/updateHistoryAt|speakHistoryAt/.test(preload)) pass("preload edit/speak history");
 else fail("preload missing edit/speak history");
+if (/pinHistoryAt|pinnedHistory|Pin to top/.test(main)) pass("main pin history");
+else fail("main missing pin history");
+if (/pinHistoryAt|☆|★ pin|Pin to top/i.test(settings)) pass("settings pin history");
+else fail("settings missing pin history");
+if (/pinHistoryAt/.test(preload)) pass("preload pin history");
+else fail("preload missing pin history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -8,8 +8,10 @@ contextBridge.exposeInMainWorld("dictaste", {
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   listSapiVoices: () => ipcRenderer.invoke("list-sapi-voices"),
   testVoice: () => ipcRenderer.invoke("test-voice"),
-  copyLastTranscript: (index) => ipcRenderer.invoke("copy-last-transcript", index),
-  pasteLastTranscript: (index) => ipcRenderer.invoke("paste-last-transcript", index),
+  copyLastTranscript: (index, opts) =>
+    ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
+  pasteLastTranscript: (index, opts) =>
+    ipcRenderer.invoke("paste-last-transcript", index, opts || {}),
   cancelDictation: () => ipcRenderer.invoke("cancel-dictation"),
   setSttLang: (lang) => ipcRenderer.invoke("set-stt-lang", lang),
   setCaseMode: (mode) => ipcRenderer.invoke("set-case-mode", mode),
@@ -25,13 +27,14 @@ contextBridge.exposeInMainWorld("dictaste", {
   importHistory: () => ipcRenderer.invoke("import-history"),
   openUserData: () => ipcRenderer.invoke("open-user-data"),
   resetHotkeys: () => ipcRenderer.invoke("reset-hotkeys"),
-  clearHistory: () => ipcRenderer.invoke("clear-history"),
+  clearHistory: (opts) => ipcRenderer.invoke("clear-history", opts || {}),
   rereadLast: () => ipcRenderer.invoke("reread-last"),
   undoLastDictation: () => ipcRenderer.invoke("undo-last-dictation"),
   deleteHistoryAt: (index) => ipcRenderer.invoke("delete-history-at", index),
   updateHistoryAt: (index, text) =>
     ipcRenderer.invoke("update-history-at", index, text),
   speakHistoryAt: (index) => ipcRenderer.invoke("speak-history-at", index),
+  pinHistoryAt: (index) => ipcRenderer.invoke("pin-history-at", index),
   repolishLast: (index) => ipcRenderer.invoke("repolish-last", index),
   copySupportDiagnostics: () => ipcRenderer.invoke("copy-support-diagnostics"),
   getHotkeysPaused: () => ipcRenderer.invoke("get-hotkeys-paused"),
