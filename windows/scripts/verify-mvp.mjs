@@ -451,6 +451,12 @@ if (/id="snippets"|saveSnippets|Save last transcript as snippet/i.test(settings)
 else fail("settings missing snippets");
 if (/getSnippets|setSnippets|pasteSnippetAt/.test(preload)) pass("preload snippets");
 else fail("preload missing snippets");
+if (/nvidiaKey|speakTextByoNVIDIA|polishTextByoNVIDIA|magpie/i.test(main))
+  pass("main NVIDIA NIM polish/TTS");
+else fail("main missing NVIDIA NIM");
+if (/id="nvidia"|nvidiaPolishModel|NVIDIA Magpie/i.test(settings))
+  pass("settings NVIDIA fields");
+else fail("settings missing NVIDIA fields");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

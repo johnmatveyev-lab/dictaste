@@ -165,9 +165,10 @@
 
   <label>Highlight-to-speak engine</label>
   <select id="ttsEngine" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
-    <option value="auto">Auto (premium if Pro license · else system)</option>
+    <option value="auto">Auto (managed · NVIDIA · OpenAI · system)</option>
     <option value="system">System SAPI only (free · offline)</option>
-    <option value="managed">Prefer managed premium (Pro · falls back to system)</option>
+    <option value="managed">Prefer managed premium (Pro · falls back)</option>
+    <option value="nvidia">NVIDIA Magpie TTS (your NIM key)</option>
   </select>
 
   <label>SAPI speech rate <span id="ttsRateVal" style="color:var(--lime)">0</span> (−10 slow · 10 fast)</label>
@@ -194,8 +195,27 @@
     <button type="button" id="testVoice" class="ghost">Test voice</button>
   </div>
 
-  <label>OpenAI API key (Whisper STT + BYO premium TTS)</label>
-  <input id="openai" type="password" placeholder="sk-… (Developer plan premium voices)" autocomplete="off" spellcheck="false" />
+  <label>NVIDIA API key (NIM polish + Magpie TTS)</label>
+  <input id="nvidia" type="password" placeholder="nvapi-… from build.nvidia.com" autocomplete="off" spellcheck="false" />
+  <label>NVIDIA polish model</label>
+  <select id="nvidiaPolishModel" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="nvidia/nemotron-mini-4b-instruct">nemotron-mini-4b-instruct</option>
+    <option value="meta/llama-3.1-8b-instruct">llama-3.1-8b-instruct</option>
+    <option value="meta/llama-3.1-70b-instruct">llama-3.1-70b-instruct</option>
+    <option value="nvidia/llama-3.3-nemotron-super-49b-v1">llama-3.3-nemotron-super-49b</option>
+  </select>
+  <label>NVIDIA Magpie voice</label>
+  <select id="nvidiaVoice" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
+    <option value="English-US.Female-1">English-US.Female-1</option>
+    <option value="English-US.Male-1">English-US.Male-1</option>
+    <option value="English-US.Female-Calm">English-US.Female-Calm</option>
+    <option value="English-US.Male-Calm">English-US.Male-Calm</option>
+    <option value="English-US.Female-Neutral">English-US.Female-Neutral</option>
+    <option value="English-US.Male-Neutral">English-US.Male-Neutral</option>
+  </select>
+
+  <label>OpenAI API key (Whisper STT + BYO premium TTS + polish)</label>
+  <input id="openai" type="password" placeholder="sk-… (optional second provider)" autocomplete="off" spellcheck="false" />
 
   <label>whisper-cli binary path (offline)</label>
   <input id="whisperBin" placeholder="C:\tools\whisper-cli.exe" />
@@ -264,7 +284,8 @@
   <p class="hint">
     Free / Developer (GitHub star + BYO LLM) / Pro plans match Mac.
     STT: Web Speech by default; OpenAI Whisper or local whisper.cpp for quality.
-    Highlight-to-speak cascade: Pro managed neural → BYO OpenAI (your key) → free Windows SAPI.
+    Highlight-to-speak cascade: Pro managed → NVIDIA Magpie (your NIM key) → BYO OpenAI → free Windows SAPI.
+    AI polish cascade: managed license → NVIDIA NIM chat → OpenAI chat.
     Undo last dictation · append joiner · HUD mode chips · append to last · continuous · tray quick toggles · sticky HUD · tray speech rate · re-polish last · copy diagnostics · live HUD word count · skip short reads · re-read last · clear history · skip polish under N words · open data folder · reset hotkeys · word-count toast · import history · smart quotes · compact HUD · tray language · case modes · paste from history · history size · timed pause · persist pause · double-space · max duration · silence auto-stop · paste delay. Spoken punctuation + strip fillers run offline first; replacements + auto-capitalize after AI polish. Sound cues confirm start/stop. Export history writes a .txt under Documents. Startup silently checks for newer Setup builds.
     Remappable hotkeys + launch-at-login keep the tray ready after reboot.
     Unlock: <a href="https://dictaste.vercel.app/developers/setup" style="color:var(--lime)" target="_blank" rel="noopener noreferrer">developers/setup</a>
@@ -411,6 +432,11 @@
       document.getElementById('ttsRateVal').textContent = String(rate);
       document.getElementById('ttsVoice').value = c.ttsVoice || 'alloy';
       document.getElementById('openai').value = c.openAIKey || '';
+      document.getElementById('nvidia').value = c.nvidiaKey || '';
+      document.getElementById('nvidiaPolishModel').value =
+        c.nvidiaPolishModel || 'nvidia/nemotron-mini-4b-instruct';
+      document.getElementById('nvidiaVoice').value =
+        c.nvidiaVoice || 'English-US.Female-1';
       document.getElementById('whisperBin').value = c.whisperBin || '';
       document.getElementById('whisperModel').value = c.whisperModel || '';
       await fillSapiVoices(c.ttsSapiVoice || '');
@@ -731,6 +757,12 @@
         ttsSapiVoice: document.getElementById('ttsSapiVoice').value || '',
         ttsVoice: document.getElementById('ttsVoice').value || 'alloy',
         openAIKey: document.getElementById('openai').value.trim(),
+        nvidiaKey: document.getElementById('nvidia').value.trim(),
+        nvidiaPolishModel:
+          document.getElementById('nvidiaPolishModel').value ||
+          'nvidia/nemotron-mini-4b-instruct',
+        nvidiaVoice:
+          document.getElementById('nvidiaVoice').value || 'English-US.Female-1',
         whisperBin: document.getElementById('whisperBin').value.trim(),
         whisperModel: document.getElementById('whisperModel').value.trim(),
       });

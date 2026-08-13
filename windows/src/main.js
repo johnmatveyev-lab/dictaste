@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - BYO NVIDIA NIM polish + Magpie TTS (nvapi key)
  * - Snippets — quick paste phrases from tray + Settings
  * - Reorder history · boost to top · pin move up/down
  * - Pin history items (stay on top · survive clear of recents)
@@ -16,6 +17,7 @@
  * - Highlight-to-speak: selection/clipboard
  *   · free system SAPI voices
  *   · managed premium TTS via /api/v1/tts (Pro)
+ *   · BYO NVIDIA Magpie TTS when nvidiaKey set
  *   · BYO OpenAI TTS when openAIKey set (Developer plan parity)
  *   · SAPI fallback
  * - Optional launch at login
@@ -153,6 +155,11 @@ function defaultConfig() {
      */
     caseMode: "sentence",
     openAIKey: "",
+    /** NGC / NVIDIA NIM API key — BYO polish + Magpie TTS */
+    nvidiaKey: "",
+    nvidiaPolishModel: "nvidia/nemotron-mini-4b-instruct",
+    /** Magpie speaker id */
+    nvidiaVoice: "English-US.Female-1",
     /** Absolute path to whisper.cpp `whisper-cli` or `main` binary (optional offline) */
     whisperBin: "",
     whisperModel: "",
@@ -475,6 +482,8 @@ const SETTINGS_EXPORT_KEYS = [
   "ttsSapiVoice",
   "ttsEngine",
   "ttsVoice",
+  "nvidiaPolishModel",
+  "nvidiaVoice",
   "launchAtLogin",
   "quietNotifications",
   "persistPauseHotkeys",
@@ -508,6 +517,7 @@ function exportSettings({ includeSecrets = false } = {}) {
     if (includeSecrets) {
       out.settings.licenseKey = cfg?.licenseKey || "";
       out.settings.openAIKey = cfg?.openAIKey || "";
+      out.settings.nvidiaKey = cfg?.nvidiaKey || "";
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const dest = path.join(
@@ -559,6 +569,9 @@ async function importSettings() {
     }
     if (typeof incoming.openAIKey === "string" && incoming.openAIKey) {
       next.openAIKey = incoming.openAIKey;
+    }
+    if (typeof incoming.nvidiaKey === "string" && incoming.nvidiaKey) {
+      next.nvidiaKey = incoming.nvidiaKey;
     }
     cfg = next;
     cfg.hotkeyDictate = hotkeyDictateAccel();
@@ -919,19 +932,40 @@ function requestBinary(url, { method = "GET", headers = {}, body } = {}) {
   });
 }
 
-/** Resolve preferred engine and speak (managed → BYO → SAPI). */
+/** Resolve preferred engine and speak (managed → NVIDIA → OpenAI → SAPI). */
 async function speakText(text) {
   const engine = cfg.ttsEngine || "auto";
   const tryNeural =
     engine === "managed" ||
-    (engine === "auto" && (Boolean(cfg.licenseKey) || Boolean(cfg.openAIKey)));
+    engine === "nvidia" ||
+    (engine === "auto" &&
+      (Boolean(cfg.licenseKey) || Boolean(cfg.openAIKey) || Boolean(cfg.nvidiaKey)));
+
+  if (engine === "nvidia") {
+    if (cfg.nvidiaKey) {
+      try {
+        if (await speakTextByoNVIDIA(text)) return;
+      } catch (e) {
+        notify(`NVIDIA TTS failed — system voice (${e.message || e})`);
+      }
+    }
+    await speakTextSapi(text);
+    return;
+  }
 
   if (tryNeural) {
-    if (cfg.licenseKey) {
+    if (cfg.licenseKey && engine !== "nvidia") {
       try {
         if (await speakTextManaged(text)) return;
       } catch (e) {
-        /* fall through to BYO/SAPI */
+        /* fall through */
+      }
+    }
+    if (cfg.nvidiaKey) {
+      try {
+        if (await speakTextByoNVIDIA(text)) return;
+      } catch (e) {
+        /* fall through */
       }
     }
     if (cfg.openAIKey) {
@@ -943,6 +977,100 @@ async function speakText(text) {
     }
   }
   await speakTextSapi(text);
+}
+
+/**
+ * BYO NVIDIA Magpie TTS via NIM (OpenAI-compatible /audio/speech, then Magpie invoke).
+ */
+async function speakTextByoNVIDIA(text) {
+  const key = (cfg.nvidiaKey || "").trim();
+  if (!key || !text?.trim()) return false;
+  broadcastStatus({ phase: "tts", reading: false, engine: "nvidia" });
+  const models = [
+    "nvidia/magpie-tts-multilingual",
+    "magpie-tts-multilingual",
+  ];
+  const voice = cfg.nvidiaVoice || "English-US.Female-1";
+  for (const model of models) {
+    try {
+      const bin = await requestBinary(
+        "https://integrate.api.nvidia.com/v1/audio/speech",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+            Accept: "application/octet-stream",
+          },
+          body: JSON.stringify({
+            model,
+            input: text,
+            voice,
+            response_format: "mp3",
+          }),
+        }
+      );
+      if (bin.ok && bin.buffer?.length > 64) {
+        const mp3Path = path.join(
+          app.getPath("temp"),
+          `dictaste-nvidia-${Date.now()}.mp3`
+        );
+        fs.writeFileSync(mp3Path, bin.buffer);
+        await playMp3File(mp3Path);
+        try {
+          fs.unlinkSync(mp3Path);
+        } catch {
+          /* ignore */
+        }
+        return true;
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  // Magpie invoke fallback
+  try {
+    const bin = await requestBinary(
+      "https://integrate.api.nvidia.com/v1/audio/nvidia/magpie-tts-multilingual",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ text, voice, quality: "high" }),
+      }
+    );
+    let audioBuf = null;
+    if (bin.ok && bin.buffer?.length > 64) {
+      try {
+        const json = JSON.parse(bin.buffer.toString("utf8"));
+        if (json?.audio || json?.audio_base64) {
+          audioBuf = Buffer.from(json.audio || json.audio_base64, "base64");
+        }
+      } catch {
+        audioBuf = bin.buffer;
+      }
+    }
+    if (audioBuf?.length > 64) {
+      const mp3Path = path.join(
+        app.getPath("temp"),
+        `dictaste-magpie-${Date.now()}.mp3`
+      );
+      fs.writeFileSync(mp3Path, audioBuf);
+      await playMp3File(mp3Path);
+      try {
+        fs.unlinkSync(mp3Path);
+      } catch {
+        /* ignore */
+      }
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 function applyLaunchAtLogin(enabled) {
@@ -1474,7 +1602,6 @@ function setAppendJoiner(mode) {
 
 async function polishText(text) {
   if (!cfg.polish || !text.trim()) return text;
-  if (!cfg.licenseKey) return text;
   const minW = minWordsForPolishClamped();
   if (minW > 0) {
     const wc = countWords(text);
@@ -1483,48 +1610,124 @@ async function polishText(text) {
       return text;
     }
   }
-  const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
-  try {
-    const { status, json } = await requestJson(`${base}/api/v1/polish`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.licenseKey}` },
-      body: { text },
-    });
-    if (status === 200 && json.text) return json.text;
-    if (status === 402) {
-      const msg =
-        json?.error ||
-        "Polish quota reached — upgrade to Pro for more managed polish.";
-      notify(msg, { force: true });
-      const upgrade =
-        json?.upgradeUrl || `${base}/pricing`;
-      try {
-        shell.openExternal(upgrade);
-      } catch {
-        /* ignore */
-      }
-      broadcastStatus({ phase: "idle", error: msg, code: json?.code || "quota" });
-      return text;
-    }
-    if (status === 403 && json?.code === "byo_only") {
-      const msg =
-        json?.error ||
-        "Developer plan is BYO LLM — add your API key in Settings, or upgrade for managed polish.";
-      notify(msg, { force: true });
-      broadcastStatus({ phase: "idle", error: msg, code: "byo_only" });
-      return text;
-    }
-    if (status === 401) {
-      notify("License invalid — paste a valid key in Settings or re-unlock on the site.", {
-        force: true,
+
+  // 1) Managed polish when licensed
+  if (cfg.licenseKey) {
+    const base = (cfg.apiBase || DEFAULT_API).replace(/\/$/, "");
+    try {
+      const { status, json } = await requestJson(`${base}/api/v1/polish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.licenseKey}` },
+        body: { text },
       });
-      broadcastStatus({ phase: "idle", error: "Invalid license", code: "auth" });
-      return text;
+      if (status === 200 && json.text) return json.text;
+      if (status === 402) {
+        const msg =
+          json?.error ||
+          "Polish quota reached — upgrade to Pro for more managed polish.";
+        notify(msg, { force: true });
+        const upgrade = json?.upgradeUrl || `${base}/pricing`;
+        try {
+          shell.openExternal(upgrade);
+        } catch {
+          /* ignore */
+        }
+        broadcastStatus({ phase: "idle", error: msg, code: json?.code || "quota" });
+        // fall through to BYO NVIDIA / OpenAI if keys present
+      } else if (status === 403 && json?.code === "byo_only") {
+        // Developer plan — use BYO keys below
+      } else if (status === 401) {
+        notify(
+          "License invalid — paste a valid key in Settings or re-unlock on the site.",
+          { force: true }
+        );
+        broadcastStatus({ phase: "idle", error: "Invalid license", code: "auth" });
+      }
+    } catch {
+      /* try BYO */
     }
-  } catch {
-    /* keep raw */
   }
+
+  // 2) BYO NVIDIA NIM chat (OpenAI-compatible)
+  if ((cfg.nvidiaKey || "").trim()) {
+    const polished = await polishTextByoNVIDIA(text);
+    if (polished) return polished;
+  }
+
+  // 3) BYO OpenAI chat
+  if ((cfg.openAIKey || "").trim()) {
+    const polished = await polishTextByoOpenAI(text);
+    if (polished) return polished;
+  }
+
   return text;
+}
+
+async function polishTextByoNVIDIA(text) {
+  const key = (cfg.nvidiaKey || "").trim();
+  if (!key) return null;
+  const models = [
+    cfg.nvidiaPolishModel || "nvidia/nemotron-mini-4b-instruct",
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+  ];
+  const system = `You are a dictation editor. Fix grammar and structure. Remove filler. Output ONLY the cleaned text.`;
+  for (const model of models) {
+    try {
+      const { status, json } = await requestJson(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}` },
+          body: {
+            model,
+            temperature: 0.3,
+            max_tokens: Math.min(4096, Math.max(256, Math.ceil(text.length / 2) + 200)),
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: `Raw transcript:\n${text}` },
+            ],
+          },
+        }
+      );
+      const content = json?.choices?.[0]?.message?.content?.trim();
+      if (status === 200 && content) return content;
+    } catch {
+      /* next model */
+    }
+  }
+  return null;
+}
+
+async function polishTextByoOpenAI(text) {
+  const key = (cfg.openAIKey || "").trim();
+  if (!key) return null;
+  try {
+    const { status, json } = await requestJson(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}` },
+        body: {
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a dictation editor. Fix grammar and structure. Remove filler. Output ONLY the cleaned text.",
+            },
+            { role: "user", content: `Raw transcript:\n${text}` },
+          ],
+        },
+      }
+    );
+    const content = json?.choices?.[0]?.message?.content?.trim();
+    if (status === 200 && content) return content;
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 /** Compare semver-ish x.y.z — returns -1 / 0 / 1 */
@@ -2211,6 +2414,8 @@ function copySupportDiagnostics() {
     `License: ${cfg?.licenseKey ? "set (" + String(cfg.licenseKey).slice(0, 8) + "…)" : "missing"}`,
     `STT: ${cfg?.sttMode || "webspeech"} · ${cfg?.sttLang || "en-US"}`,
     `TTS: ${cfg?.ttsEngine || "auto"} · rate ${cfg?.ttsRate ?? 0} · voice ${cfg?.ttsSapiVoice || "default"} / ${cfg?.ttsVoice || "alloy"}`,
+    `NVIDIA: ${cfg?.nvidiaKey ? "key set" : "no key"} · polish ${cfg?.nvidiaPolishModel || "default"} · voice ${cfg?.nvidiaVoice || "default"}`,
+    `OpenAI BYO: ${cfg?.openAIKey ? "key set" : "no key"}`,
     `Polish: ${cfg?.polish !== false ? "on" : "off"} · minWordsPolish ${minWordsForPolishClamped()} · minWordsRead ${minWordsForReadClamped()}`,
     `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
