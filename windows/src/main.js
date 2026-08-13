@@ -3451,6 +3451,100 @@ function sortLinesLast(kind = "asc") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Encode/decode transforms for last transcript (dev helpers).
+ * @param {"b64"|"b64d"|"url"|"urld"|"html"|"htmld"} kind
+ */
+function encodeText(raw, kind = "b64") {
+  const t = String(raw || "");
+  if (!t) return "";
+  switch (String(kind || "b64")) {
+    case "b64":
+      return Buffer.from(t, "utf8").toString("base64");
+    case "b64d": {
+      try {
+        const cleaned = t.replace(/\s+/g, "");
+        return Buffer.from(cleaned, "base64").toString("utf8");
+      } catch {
+        return "";
+      }
+    }
+    case "url":
+      try {
+        return encodeURIComponent(t);
+      } catch {
+        return "";
+      }
+    case "urld":
+      try {
+        return decodeURIComponent(t.replace(/\+/g, "%20"));
+      } catch {
+        return "";
+      }
+    case "html":
+      return t
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    case "htmld":
+      return t
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+    default:
+      return Buffer.from(t, "utf8").toString("base64");
+  }
+}
+
+/**
+ * Encode/decode last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function encodeLast(kind = "b64") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to encode", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = encodeText(src, kind);
+  if (!text && kind !== "b64d" && kind !== "urld" && kind !== "htmld") {
+    notify("Encode produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  if (!text) {
+    notify("Decode failed — check input", { force: true });
+    return { ok: false, error: "decode" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4650,6 +4744,18 @@ function rebuildTrayMenu() {
         { label: "Shuffle", click: () => sortLinesLast("shuffle") },
       ],
     },
+    {
+      label: "Encode last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Base64 encode", click: () => encodeLast("b64") },
+        { label: "Base64 decode", click: () => encodeLast("b64d") },
+        { label: "URL encode", click: () => encodeLast("url") },
+        { label: "URL decode", click: () => encodeLast("urld") },
+        { label: "HTML escape", click: () => encodeLast("html") },
+        { label: "HTML unescape", click: () => encodeLast("htmld") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4880,6 +4986,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "asc"),
       text: sortLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("encode-last", (_e, kind) =>
+    encodeLast(String(kind || "b64"))
+  );
+  ipcMain.handle("encode-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "b64"),
+      text: encodeText(src, kind),
       source: src,
     };
   });

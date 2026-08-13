@@ -536,6 +536,14 @@ if (/id="sortLinesAsc"|sortLinesLast|Sort lines last/i.test(settings))
 else fail("settings missing sort lines last");
 if (/sortLinesLast|sortLinesPreview/.test(preload)) pass("preload sort lines last");
 else fail("preload missing sort lines last");
+if (/encodeLast|encodeText|Encode last/.test(main))
+  pass("main encode last");
+else fail("main missing encode last");
+if (/id="encodeB64"|encodeLast|Encode last/i.test(settings))
+  pass("settings encode last");
+else fail("settings missing encode last");
+if (/encodeLast|encodePreview/.test(preload)) pass("preload encode last");
+else fail("preload missing encode last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

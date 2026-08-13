@@ -165,6 +165,16 @@
     <button type="button" id="sortLinesShuffle" class="ghost">Shuffle</button>
   </div>
 
+  <label>Encode last <span style="font-weight:400;color:var(--muted)">(Base64 · URL · HTML · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="encodeB64" class="ghost">Base64</button>
+    <button type="button" id="encodeB64d" class="ghost">Base64 decode</button>
+    <button type="button" id="encodeUrl" class="ghost">URL encode</button>
+    <button type="button" id="encodeUrld" class="ghost">URL decode</button>
+    <button type="button" id="encodeHtml" class="ghost">HTML escape</button>
+    <button type="button" id="encodeHtmld" class="ghost">HTML unescape</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1092,6 +1102,20 @@
     document.getElementById('sortLinesDedupe').onclick = () => sortLinesNow('dedupe');
     document.getElementById('sortLinesDedupeSort').onclick = () => sortLinesNow('dedupe-sort');
     document.getElementById('sortLinesShuffle').onclick = () => sortLinesNow('shuffle');
+    async function encodeNow(kind) {
+      const r = await window.dictaste.encodeLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Encode failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('encodeB64').onclick = () => encodeNow('b64');
+    document.getElementById('encodeB64d').onclick = () => encodeNow('b64d');
+    document.getElementById('encodeUrl').onclick = () => encodeNow('url');
+    document.getElementById('encodeUrld').onclick = () => encodeNow('urld');
+    document.getElementById('encodeHtml').onclick = () => encodeNow('html');
+    document.getElementById('encodeHtmld').onclick = () => encodeNow('htmld');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
