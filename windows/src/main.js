@@ -3545,6 +3545,127 @@ function encodeLast(kind = "b64") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Parse JSON leniently (trim; single-line comments stripped).
+ */
+function parseJsonLoose(raw) {
+  let s = String(raw || "").trim();
+  if (!s) throw new Error("empty");
+  // Strip // line comments outside strings (best-effort for notes)
+  s = s.replace(/^\s*\/\/.*$/gm, "");
+  return JSON.parse(s);
+}
+
+function sortKeysDeep(value) {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort((a, b) => a.localeCompare(b))) {
+      out[k] = sortKeysDeep(value[k]);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * JSON helpers on last transcript.
+ * @param {"pretty"|"minify"|"sort-keys"|"keys"|"validate"} kind
+ * @returns {{ text: string, info?: string }}
+ */
+function jsonFormatText(raw, kind = "pretty") {
+  const parsed = parseJsonLoose(raw);
+  switch (String(kind || "pretty")) {
+    case "minify":
+      return { text: JSON.stringify(parsed) };
+    case "sort-keys":
+      return { text: JSON.stringify(sortKeysDeep(parsed), null, 2) };
+    case "keys": {
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { text: Object.keys(parsed).join("\n") };
+      }
+      if (Array.isArray(parsed)) {
+        return { text: parsed.map((_, i) => String(i)).join("\n") };
+      }
+      return { text: String(parsed) };
+    }
+    case "validate":
+      return {
+        text: JSON.stringify(parsed, null, 2),
+        info: Array.isArray(parsed)
+          ? `valid array · ${parsed.length} items`
+          : parsed && typeof parsed === "object"
+            ? `valid object · ${Object.keys(parsed).length} keys`
+            : `valid ${typeof parsed}`,
+      };
+    case "pretty":
+    default:
+      return { text: JSON.stringify(parsed, null, 2) };
+  }
+}
+
+/**
+ * Format last transcript as JSON and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function jsonFormatLast(kind = "pretty") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to format as JSON", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  let result;
+  try {
+    result = jsonFormatText(src, kind);
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e).slice(0, 120);
+    notify(`Invalid JSON: ${msg}`, { force: true });
+    return { ok: false, error: "invalid", detail: msg };
+  }
+  const text = result.text;
+  if (!text && text !== "") {
+    notify("JSON format produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  if (result.info) {
+    notify(result.info, { force: true });
+  }
+  const del = deliverText(text);
+  if (del.mode === "paste" && !result.info) {
+    notifyDeliver(text, "paste");
+  } else if (del.mode === "paste" && result.info) {
+    // still show brief paste confirm without flooding
+    notifyDeliver(text, "paste");
+  }
+  return {
+    ok: true,
+    text,
+    kind,
+    deliver: del.mode,
+    source: src,
+    info: result.info || null,
+  };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4756,6 +4877,17 @@ function rebuildTrayMenu() {
         { label: "HTML unescape", click: () => encodeLast("htmld") },
       ],
     },
+    {
+      label: "JSON last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Pretty print", click: () => jsonFormatLast("pretty") },
+        { label: "Minify", click: () => jsonFormatLast("minify") },
+        { label: "Sort keys", click: () => jsonFormatLast("sort-keys") },
+        { label: "Extract keys", click: () => jsonFormatLast("keys") },
+        { label: "Validate + pretty", click: () => jsonFormatLast("validate") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5001,6 +5133,29 @@ app.whenReady().then(() => {
       text: encodeText(src, kind),
       source: src,
     };
+  });
+  ipcMain.handle("json-format-last", (_e, kind) =>
+    jsonFormatLast(String(kind || "pretty"))
+  );
+  ipcMain.handle("json-format-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    try {
+      const r = jsonFormatText(src, kind);
+      return {
+        ok: true,
+        kind: String(kind || "pretty"),
+        text: r.text,
+        info: r.info || null,
+        source: src,
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        error: "invalid",
+        detail: String(e && e.message ? e.message : e),
+      };
+    }
   });
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(

@@ -544,6 +544,14 @@ if (/id="encodeB64"|encodeLast|Encode last/i.test(settings))
 else fail("settings missing encode last");
 if (/encodeLast|encodePreview/.test(preload)) pass("preload encode last");
 else fail("preload missing encode last");
+if (/jsonFormatLast|jsonFormatText|JSON last/.test(main))
+  pass("main JSON last");
+else fail("main missing JSON last");
+if (/id="jsonPretty"|jsonFormatLast|JSON last/i.test(settings))
+  pass("settings JSON last");
+else fail("settings missing JSON last");
+if (/jsonFormatLast|jsonFormatPreview/.test(preload)) pass("preload JSON last");
+else fail("preload missing JSON last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
