@@ -3338,6 +3338,119 @@ function slugifyLast(kind = "slug") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Line-order transforms for last transcript.
+ * @param {"asc"|"desc"|"reverse"|"dedupe"|"dedupe-sort"|"shuffle"} kind
+ */
+function sortLinesText(raw, kind = "asc") {
+  const t = String(raw || "").replace(/\r\n/g, "\n");
+  if (!t.trim()) return "";
+  // Preserve trailing newline intent lightly: work on content lines
+  let lines = t.split("\n");
+  // Drop a single trailing empty line from split (normal for text ending in \n)
+  const hadTrailingNl = lines.length > 1 && lines[lines.length - 1] === "";
+  if (hadTrailingNl) lines = lines.slice(0, -1);
+  const nonEmpty = () => lines.filter((l) => String(l).trim() !== "");
+  switch (String(kind || "asc")) {
+    case "desc":
+      lines = [...lines].sort((a, b) =>
+        b.localeCompare(a, undefined, { sensitivity: "base", numeric: true })
+      );
+      break;
+    case "reverse":
+      lines = [...lines].reverse();
+      break;
+    case "dedupe": {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        const key = l.trim().toLowerCase();
+        if (!key) {
+          out.push(l);
+          continue;
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(l);
+      }
+      lines = out;
+      break;
+    }
+    case "dedupe-sort": {
+      const seen = new Set();
+      const out = [];
+      for (const l of nonEmpty()) {
+        const key = l.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(l.trim());
+      }
+      out.sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+      );
+      lines = out;
+      break;
+    }
+    case "shuffle": {
+      const arr = [...lines];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      lines = arr;
+      break;
+    }
+    case "asc":
+    default:
+      lines = [...lines].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+      );
+      break;
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Sort / dedupe / reverse lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function sortLinesLast(kind = "asc") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to sort", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = sortLinesText(src, kind);
+  if (!text) {
+    notify("Sort produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4525,6 +4638,18 @@ function rebuildTrayMenu() {
         { label: "UPPER CASE", click: () => slugifyLast("upper") },
       ],
     },
+    {
+      label: "Sort lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "A → Z", click: () => sortLinesLast("asc") },
+        { label: "Z → A", click: () => sortLinesLast("desc") },
+        { label: "Reverse", click: () => sortLinesLast("reverse") },
+        { label: "Dedupe", click: () => sortLinesLast("dedupe") },
+        { label: "Dedupe + sort", click: () => sortLinesLast("dedupe-sort") },
+        { label: "Shuffle", click: () => sortLinesLast("shuffle") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4742,6 +4867,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "slug"),
       text: slugifyText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("sort-lines-last", (_e, kind) =>
+    sortLinesLast(String(kind || "asc"))
+  );
+  ipcMain.handle("sort-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "asc"),
+      text: sortLinesText(src, kind),
       source: src,
     };
   });

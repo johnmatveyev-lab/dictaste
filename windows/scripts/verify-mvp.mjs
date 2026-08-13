@@ -528,6 +528,14 @@ if (/id="slugifySlug"|slugifyLast|Slugify last/i.test(settings))
 else fail("settings missing slugify last");
 if (/slugifyLast|slugifyPreview/.test(preload)) pass("preload slugify last");
 else fail("preload missing slugify last");
+if (/sortLinesLast|sortLinesText|Sort lines last/.test(main))
+  pass("main sort lines last");
+else fail("main missing sort lines last");
+if (/id="sortLinesAsc"|sortLinesLast|Sort lines last/i.test(settings))
+  pass("settings sort lines last");
+else fail("settings missing sort lines last");
+if (/sortLinesLast|sortLinesPreview/.test(preload)) pass("preload sort lines last");
+else fail("preload missing sort lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

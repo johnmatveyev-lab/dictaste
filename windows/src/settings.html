@@ -155,6 +155,16 @@
     <button type="button" id="slugifyUpper" class="ghost">UPPER</button>
   </div>
 
+  <label>Sort lines last <span style="font-weight:400;color:var(--muted)">(A–Z · reverse · dedupe · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="sortLinesAsc" class="ghost">A → Z</button>
+    <button type="button" id="sortLinesDesc" class="ghost">Z → A</button>
+    <button type="button" id="sortLinesReverse" class="ghost">Reverse</button>
+    <button type="button" id="sortLinesDedupe" class="ghost">Dedupe</button>
+    <button type="button" id="sortLinesDedupeSort" class="ghost">Dedupe + sort</button>
+    <button type="button" id="sortLinesShuffle" class="ghost">Shuffle</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1068,6 +1078,20 @@
     document.getElementById('slugifyConstant').onclick = () => slugifyNow('constant');
     document.getElementById('slugifyLower').onclick = () => slugifyNow('lower');
     document.getElementById('slugifyUpper').onclick = () => slugifyNow('upper');
+    async function sortLinesNow(kind) {
+      const r = await window.dictaste.sortLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Sort lines failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('sortLinesAsc').onclick = () => sortLinesNow('asc');
+    document.getElementById('sortLinesDesc').onclick = () => sortLinesNow('desc');
+    document.getElementById('sortLinesReverse').onclick = () => sortLinesNow('reverse');
+    document.getElementById('sortLinesDedupe').onclick = () => sortLinesNow('dedupe');
+    document.getElementById('sortLinesDedupeSort').onclick = () => sortLinesNow('dedupe-sort');
+    document.getElementById('sortLinesShuffle').onclick = () => sortLinesNow('shuffle');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
