@@ -94,6 +94,13 @@
   <label>Text replacements <span style="font-weight:400;color:var(--muted)">(one per line: find=replace)</span></label>
   <textarea id="replacements" placeholder="teh=the&#10;btw=by the way&#10;# comments ok" style="min-height:72px;font-family:ui-monospace,monospace;font-size:0.8rem;"></textarea>
 
+  <label>Snippets <span style="font-weight:400;color:var(--muted)">(one per line · max 20 · tray paste · # comments ok)</span></label>
+  <textarea id="snippets" placeholder="Best regards,&#10;Thanks for your time.&#10;# blank lines ignored" style="min-height:72px;font-family:ui-monospace,monospace;font-size:0.8rem;"></textarea>
+  <div class="row" style="margin-top:6px">
+    <button type="button" id="saveSnippets" class="ghost">Save snippets</button>
+    <button type="button" id="saveLastSnippet" class="ghost">Save last transcript as snippet</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -338,6 +345,10 @@
       document.getElementById('hudCompact').checked = !!c.hudCompact;
       document.getElementById('showWordCount').checked = c.showWordCount !== false;
       document.getElementById('replacements').value = c.replacements || '';
+      {
+        const sn = Array.isArray(c.snippets) ? c.snippets : [];
+        document.getElementById('snippets').value = sn.join('\n');
+      }
       {
         const suf = c.pasteSuffix;
         const el = document.getElementById('pasteSuffix');
@@ -686,6 +697,10 @@
         hudCompact: document.getElementById('hudCompact').checked,
         showWordCount: document.getElementById('showWordCount').checked,
         replacements: document.getElementById('replacements').value,
+        snippets: (document.getElementById('snippets').value || '')
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter((s) => s && !s.startsWith('#')),
         pasteSuffix: (() => {
           const v = document.getElementById('pasteSuffix').value;
           return v === '\\n' ? '\n' : v;
@@ -797,6 +812,28 @@
         document.getElementById('ttsSapiVoice').options.length > 1
           ? 'SAPI voices loaded'
           : 'No SAPI voices found (Windows only)';
+    };
+    document.getElementById('saveSnippets').onclick = async () => {
+      const lines = (document.getElementById('snippets').value || '')
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s && !s.startsWith('#'));
+      const r = await window.dictaste.setSnippets(lines);
+      document.getElementById('status').textContent = r?.ok
+        ? ('Snippets saved · ' + (r.count || 0))
+        : (r?.error || 'Save snippets failed');
+      if (r?.snippets) {
+        document.getElementById('snippets').value = r.snippets.join('\n');
+      }
+    };
+    document.getElementById('saveLastSnippet').onclick = async () => {
+      const r = await window.dictaste.saveSnippetFromHistory(0, { latest: true });
+      document.getElementById('status').textContent = r?.ok
+        ? (r.duplicate ? 'Already a snippet' : ('Snippet saved · ' + (r.count || 0) + ' total'))
+        : (r?.error || 'Save snippet failed');
+      if (r?.ok && r.snippets) {
+        document.getElementById('snippets').value = r.snippets.join('\n');
+      }
     };
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

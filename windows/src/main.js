@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Snippets — quick paste phrases from tray + Settings
  * - Reorder history · boost to top · pin move up/down
  * - Pin history items (stay on top · survive clear of recents)
  * - Edit history item · read history aloud (TTS)
@@ -222,6 +223,11 @@ function defaultConfig() {
      * Max 10. Survive “clear recents”; removed by unpin/delete/clear all.
      */
     pinnedHistory: [],
+    /**
+     * Quick-paste snippets (tray Snippets menu + Settings editor).
+     * One phrase per entry; max 20. Not pushed into dictation history unless pasted via dictation.
+     */
+    snippets: [],
   };
 }
 
@@ -483,6 +489,7 @@ const SETTINGS_EXPORT_KEYS = [
   "hotkeyCancel",
   "hotkeyPasteLast",
   "historyMax",
+  "snippets",
 ];
 
 function exportSettings({ includeSecrets = false } = {}) {
@@ -1962,6 +1969,94 @@ async function speakHistoryAt(index = 0) {
   return speakReadText(t);
 }
 
+const SNIPPETS_MAX = 20;
+
+function normalizeSnippets(list) {
+  if (typeof list === "string") {
+    list = list.split(/\r?\n/);
+  }
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of list) {
+    const t = String(raw || "").trim();
+    if (!t || t.startsWith("#")) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= SNIPPETS_MAX) break;
+  }
+  return out;
+}
+
+function getSnippets() {
+  return normalizeSnippets(cfg?.snippets);
+}
+
+function setSnippets(list) {
+  const next = normalizeSnippets(list);
+  cfg = { ...cfg, snippets: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  return { ok: true, count: next.length, snippets: next };
+}
+
+/**
+ * Paste (or clipboard-deliver) a snippet by index into the focused app.
+ */
+function pasteSnippetAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const snips = getSnippets();
+  const t = String(snips[i] || "").trim();
+  if (!t) {
+    notify("No snippet at that slot", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  // Snippets are deliberate inserts — do not push into dictation history
+  const del = deliverText(t);
+  if (del.mode === "paste") {
+    notifyDeliver(t, "paste");
+  } else {
+    notify(
+      t.length > 80 ? `Snippet on clipboard · ${t.slice(0, 77)}…` : `Snippet on clipboard · ${t}`,
+      { force: true }
+    );
+  }
+  return { ok: true, deliver: del.mode, text: t, words: del.words, index: i };
+}
+
+/**
+ * Save current last transcript (or flat history item) as a new snippet.
+ */
+function saveSnippetFromHistory(index = 0, opts = {}) {
+  const latest = !!(opts && opts.latest);
+  const t = historyTextAt(index, { latest });
+  if (!t) {
+    notify("Nothing to save as snippet — dictate first", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const prev = getSnippets();
+  if (prev.includes(t)) {
+    notify("Already a snippet", { force: true });
+    return { ok: true, count: prev.length, snippets: prev, duplicate: true };
+  }
+  if (prev.length >= SNIPPETS_MAX) {
+    notify(`Snippet limit ${SNIPPETS_MAX} — remove one in Settings`, {
+      force: true,
+    });
+    return { ok: false, error: "limit" };
+  }
+  const next = [t, ...prev].slice(0, SNIPPETS_MAX);
+  const r = setSnippets(next);
+  const preview = t.length > 48 ? t.slice(0, 45) + "…" : t;
+  notify(`Snippet saved · ${preview}`, { force: true });
+  return { ...r, text: t };
+}
+
 async function refreshPlanCache({ rebuild = true, force = false } = {}) {
   if (planRefreshInFlight) return cachedPlanLabel;
   const now = Date.now();
@@ -3314,6 +3409,10 @@ function rebuildTrayMenu() {
                   click: () => boostHistoryAt(i),
                 },
                 {
+                  label: "Save as snippet",
+                  click: () => saveSnippetFromHistory(i),
+                },
+                {
                   label: "Edit in Settings…",
                   click: () => {
                     openSettings();
@@ -3376,6 +3475,47 @@ function rebuildTrayMenu() {
           {
             label: "Clear all history",
             click: () => clearHistory({ includePins: true }),
+          },
+        ];
+      })(),
+    },
+    {
+      label: `Snippets (${getSnippets().length}/${SNIPPETS_MAX})`,
+      submenu: (() => {
+        const snips = getSnippets();
+        if (!snips.length) {
+          return [
+            {
+              label: "(none — add in Settings or Save last as snippet)",
+              enabled: false,
+            },
+            { type: "separator" },
+            {
+              label: "Save last transcript as snippet",
+              enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
+              click: () => saveSnippetFromHistory(0, { latest: true }),
+            },
+            {
+              label: "Edit snippets in Settings…",
+              click: () => openSettings(),
+            },
+          ];
+        }
+        return [
+          ...snips.map((t, i) => ({
+            label: (t.length > 48 ? t.slice(0, 45) + "…" : t).replace(/\s+/g, " "),
+            enabled: !hotkeysPaused,
+            click: () => pasteSnippetAt(i),
+          })),
+          { type: "separator" },
+          {
+            label: "Save last transcript as snippet",
+            enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
+            click: () => saveSnippetFromHistory(0, { latest: true }),
+          },
+          {
+            label: "Edit snippets in Settings…",
+            click: () => openSettings(),
           },
         ];
       })(),
@@ -3500,6 +3640,9 @@ app.whenReady().then(() => {
         DEFAULT_HOTKEY_PASTE_LAST
       );
     }
+    if (next?.snippets != null) {
+      cfg.snippets = normalizeSnippets(next.snippets);
+    }
     saveConfig(cfg);
     if (Object.prototype.hasOwnProperty.call(next || {}, "launchAtLogin")) {
       applyLaunchAtLogin(cfg.launchAtLogin);
@@ -3565,6 +3708,17 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("boost-history-at", (_e, index) =>
     boostHistoryAt(Number(index) || 0)
+  );
+  ipcMain.handle("get-snippets", () => getSnippets());
+  ipcMain.handle("set-snippets", (_e, list) => setSnippets(list));
+  ipcMain.handle("paste-snippet-at", (_e, index) =>
+    pasteSnippetAt(Number(index) || 0)
+  );
+  ipcMain.handle("save-snippet-from-history", (_e, index, opts) =>
+    saveSnippetFromHistory(
+      Number(index) || 0,
+      opts && typeof opts === "object" ? opts : {}
+    )
   );
   ipcMain.handle("refresh-plan", async () => {
     const label = await refreshPlanCache({ rebuild: true, force: true });

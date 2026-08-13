@@ -444,6 +444,13 @@ if (/moveHistoryAt|boostHistoryAt|⤒/.test(settings)) pass("settings reorder/bo
 else fail("settings missing reorder/boost history");
 if (/moveHistoryAt|boostHistoryAt/.test(preload)) pass("preload reorder/boost history");
 else fail("preload missing reorder/boost history");
+if (/normalizeSnippets|pasteSnippetAt|Snippets \(/.test(main)) pass("main snippets");
+else fail("main missing snippets");
+if (/id="snippets"|saveSnippets|Save last transcript as snippet/i.test(settings))
+  pass("settings snippets");
+else fail("settings missing snippets");
+if (/getSnippets|setSnippets|pasteSnippetAt/.test(preload)) pass("preload snippets");
+else fail("preload missing snippets");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
