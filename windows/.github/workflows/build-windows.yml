@@ -3,26 +3,13 @@ name: Build Windows installer
 # GitHub Actions is currently billing-locked for this account.
 # Portable zip ships via macOS cross-build + release upload (see README).
 # Enable this workflow after billing is fixed — tags / manual only.
-#
-# Trusted Signing: skeleton only. Steps no-op unless workflow_dispatch input
-# enable_trusted_signing=true AND Azure OIDC secrets are present.
-# See docs/WINDOWS-TRUSTED-SIGNING.md — never commit secrets or .pfx.
 on:
   workflow_dispatch:
-    inputs:
-      enable_trusted_signing:
-        description: "Run Azure Trusted Signing (requires secrets; default off — keep false until identity + secrets exist)"
-        type: boolean
-        default: false
   push:
     tags: ["v*"]
 
-# contents:write — attach artifacts to GitHub Release on tags.
-# id-token:write — GitHub OIDC for azure/login when Trusted Signing is enabled.
-# Harmless when signing is skipped; required before enable_trusted_signing=true.
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   verify:
@@ -50,75 +37,6 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run dist
-
-      # --- Azure Trusted Signing (gated; default skip) ---
-      # Prefer OIDC (AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID).
-      # Account / profile / endpoint: AZURE_TRUSTED_SIGNING_* placeholders only.
-      # Intended later: sign Dictaste.exe before zip/NSIS; RFC3161 timestamp;
-      # tag/release or explicit dispatch only. See docs/WINDOWS-TRUSTED-SIGNING.md.
-      - name: Decide Trusted Signing
-        id: trusted_signing
-        shell: bash
-        env:
-          ENABLE_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_trusted_signing || false }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          AZURE_TRUSTED_SIGNING_PROFILE: ${{ vars.AZURE_TRUSTED_SIGNING_PROFILE }}
-        run: |
-          set -euo pipefail
-          if [[ "${ENABLE_INPUT}" == "true" ]] \
-            && [[ -n "${AZURE_CLIENT_ID}" ]] \
-            && [[ -n "${AZURE_TENANT_ID}" ]] \
-            && [[ -n "${AZURE_SUBSCRIPTION_ID}" ]] \
-            && [[ -n "${AZURE_TRUSTED_SIGNING_ENDPOINT}" ]] \
-            && [[ -n "${AZURE_TRUSTED_SIGNING_ACCOUNT}" ]] \
-            && [[ -n "${AZURE_TRUSTED_SIGNING_PROFILE}" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "Trusted Signing enabled for this run."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Trusted Signing skipped (enable_trusted_signing off and/or Azure secrets/vars missing). Unsigned build remains SoT."
-          fi
-
-      - name: Azure login (OIDC)
-        if: steps.trusted_signing.outputs.enabled == 'true'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      # Official Microsoft pattern: azure/artifact-signing-action
-      # (formerly azure/trusted-signing-action). Paths/account names are
-      # placeholders — wire real resource names via GitHub vars/secrets only.
-      - name: Sign with Azure Trusted Signing
-        if: steps.trusted_signing.outputs.enabled == 'true'
-        uses: azure/artifact-signing-action@v1
-        with:
-          endpoint: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ vars.AZURE_TRUSTED_SIGNING_PROFILE }}
-          # Future: point at unpacked Dictaste.exe before zip; for NSIS skeleton
-          # the built installer is the current artifact path.
-          files-folder: ${{ github.workspace }}\dist
-          files-folder-filter: exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          exclude-environment-credential: true
-          exclude-workload-identity-credential: true
-          exclude-managed-identity-credential: true
-          exclude-shared-token-cache-credential: true
-          exclude-visual-studio-credential: true
-          exclude-visual-studio-code-credential: true
-          exclude-azure-cli-credential: false
-          exclude-azure-powershell-credential: true
-          exclude-azure-developer-cli-credential: true
-          exclude-interactive-browser-credential: true
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

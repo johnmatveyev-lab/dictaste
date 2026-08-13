@@ -496,6 +496,14 @@ if (/id="pasteDateTime"|pasteDateTime|Paste date \/ time/i.test(settings))
 else fail("settings missing paste date/time");
 if (/pasteDateTime|formatNow/.test(preload)) pass("preload paste date/time");
 else fail("preload missing paste date/time");
+if (/pasteId|generateId|Paste UUID \/ ID/.test(main))
+  pass("main paste UUID/ID");
+else fail("main missing paste UUID/ID");
+if (/id="pasteUuid"|pasteId|Paste UUID \/ ID/i.test(settings))
+  pass("settings paste UUID/ID");
+else fail("settings missing paste UUID/ID");
+if (/pasteId|generateId/.test(preload)) pass("preload paste UUID/ID");
+else fail("preload missing paste UUID/ID");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

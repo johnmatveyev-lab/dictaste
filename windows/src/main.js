@@ -3042,6 +3042,51 @@ function pasteDateTime(kind = "datetime") {
   return { ok: true, text, kind, deliver: del.mode };
 }
 
+/**
+ * Generate an ID for paste-uuid helper (no history pollution).
+ * @param {"uuid"|"uuid-upper"|"compact"|"short"} kind
+ */
+function generateId(kind = "uuid") {
+  let u;
+  try {
+    u = require("crypto").randomUUID();
+  } catch {
+    // Extremely old Node fallback
+    const b = require("crypto").randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = b.toString("hex");
+    u = `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  switch (String(kind || "uuid")) {
+    case "uuid-upper":
+      return u.toUpperCase();
+    case "compact":
+      return u.replace(/-/g, "");
+    case "short":
+      return u.replace(/-/g, "").slice(0, 8);
+    case "uuid":
+    default:
+      return u;
+  }
+}
+
+/**
+ * Paste (or clipboard-deliver) a fresh UUID/ID. Does not push dictation history.
+ */
+function pasteId(kind = "uuid") {
+  const text = generateId(kind);
+  if (!text) {
+    notify("Could not generate ID", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4154,6 +4199,28 @@ function rebuildTrayMenu() {
         },
       ],
     },
+    {
+      label: "Paste UUID / ID",
+      enabled: !hotkeysPaused,
+      submenu: [
+        {
+          label: `UUID · ${generateId("uuid")}`,
+          click: () => pasteId("uuid"),
+        },
+        {
+          label: `UUID upper · ${generateId("uuid-upper")}`,
+          click: () => pasteId("uuid-upper"),
+        },
+        {
+          label: `Compact · ${generateId("compact")}`,
+          click: () => pasteId("compact"),
+        },
+        {
+          label: `Short · ${generateId("short")}`,
+          click: () => pasteId("short"),
+        },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4330,6 +4397,12 @@ app.whenReady().then(() => {
     ok: true,
     kind: String(kind || "datetime"),
     text: formatNow(kind),
+  }));
+  ipcMain.handle("paste-id", (_e, kind) => pasteId(String(kind || "uuid")));
+  ipcMain.handle("generate-id", (_e, kind) => ({
+    ok: true,
+    kind: String(kind || "uuid"),
+    text: generateId(kind),
   }));
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(

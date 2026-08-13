@@ -115,6 +115,14 @@
     <button type="button" id="pasteFilename" class="ghost">Filename stamp</button>
   </div>
 
+  <label>Paste UUID / ID <span style="font-weight:400;color:var(--muted)">(fresh each click · no history pollution)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="pasteUuid" class="ghost">UUID</button>
+    <button type="button" id="pasteUuidUpper" class="ghost">UUID upper</button>
+    <button type="button" id="pasteUuidCompact" class="ghost">Compact</button>
+    <button type="button" id="pasteUuidShort" class="ghost">Short 8</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -973,6 +981,17 @@
     document.getElementById('pasteLocal').onclick = () => pasteNow('local');
     document.getElementById('pasteIso').onclick = () => pasteNow('iso');
     document.getElementById('pasteFilename').onclick = () => pasteNow('filename');
+    async function pasteIdNow(kind) {
+      const r = await window.dictaste.pasteId(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (r.text || kind))
+        : (r?.error || 'Paste UUID failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+    }
+    document.getElementById('pasteUuid').onclick = () => pasteIdNow('uuid');
+    document.getElementById('pasteUuidUpper').onclick = () => pasteIdNow('uuid-upper');
+    document.getElementById('pasteUuidCompact').onclick = () => pasteIdNow('compact');
+    document.getElementById('pasteUuidShort').onclick = () => pasteIdNow('short');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
