@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Merge history with next · duplicate history item
  * - BYO NVIDIA NIM polish + Magpie TTS (nvapi key)
  * - Snippets — quick paste phrases from tray + Settings
  * - Reorder history · boost to top · pin move up/down
@@ -2157,6 +2158,127 @@ function boostHistoryAt(index = 0) {
 }
 
 /**
+ * Merge flat-index item with the next older row in the same section (pin or recents).
+ * Chronological join: older + joiner + newer (uses append joiner setting).
+ */
+function mergeHistoryWithNext(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const items = flatHistory();
+  if (items.length < 2 || i >= items.length - 1) {
+    notify("Need two items in the same section to merge", { force: true });
+    return { ok: false, error: "need_pair" };
+  }
+  const a = items[i];
+  const b = items[i + 1];
+  if (a.pinned !== b.pinned) {
+    notify("Can't merge pin with recent — same section only", { force: true });
+    return { ok: false, error: "cross_section" };
+  }
+  const joiner = appendJoinerText();
+  // UI lists newest first within recents; pins in pin order.
+  // Merge as "next (older/below) + joiner + current" for recents chronological feel.
+  // For pins, keep listed order: current + joiner + next.
+  const merged = a.pinned
+    ? `${a.text}${joiner}${b.text}`.replace(/\s+/g, (m) => m).trim()
+    : `${b.text}${joiner}${a.text}`.replace(/\s+/g, (m) => m).trim();
+  // Clean double spaces from joiner edges lightly
+  const text = merged.replace(/[ \t]{2,}/g, " ").trim();
+  if (!text) {
+    return { ok: false, error: "empty" };
+  }
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (a.pinned) {
+    const pi = pinned.indexOf(a.text);
+    const pj = pinned.indexOf(b.text);
+    if (pi < 0 || pj < 0) return { ok: false, error: "missing" };
+    const lo = Math.min(pi, pj);
+    const hi = Math.max(pi, pj);
+    pinned = pinned.filter((_, idx) => idx !== hi);
+    pinned[lo] = text;
+  } else {
+    const hi = hist.indexOf(a.text);
+    const hj = hist.indexOf(b.text);
+    if (hi < 0 || hj < 0) return { ok: false, error: "missing" };
+    // remove both, insert merged at newer position (min index = newer)
+    const keepIdx = Math.min(hi, hj);
+    hist = hist.filter((t) => t !== a.text && t !== b.text);
+    hist = [text, ...hist.filter((t) => t !== text)].slice(0, historyMaxClamped());
+    // ensure merged is at front of recents (newest)
+    void keepIdx;
+    lastTranscript = text;
+  }
+  persistHistoryStores(pinned, hist);
+  const after = flatHistory();
+  const newIndex = after.findIndex((x) => x.text === text);
+  const preview = text.length > 48 ? text.slice(0, 45) + "…" : text;
+  notify(`Merged · ${preview}`, { force: true });
+  return {
+    ok: true,
+    index: newIndex >= 0 ? newIndex : 0,
+    text,
+    remaining: after.length,
+  };
+}
+
+/**
+ * Merge the two newest unpinned dictations (tray/settings convenience).
+ */
+function mergeLastTwoHistory() {
+  const hist = normalizeHistory(cfg?.history);
+  if (hist.length < 2) {
+    notify("Need two recent transcripts to merge", { force: true });
+    return { ok: false, error: "need_pair" };
+  }
+  const pinned = normalizePinned(cfg?.pinnedHistory);
+  // flat index of first recent
+  const start = pinned.length;
+  return mergeHistoryWithNext(start);
+}
+
+/**
+ * Duplicate a history item (insert copy at top of its section).
+ */
+function duplicateHistoryAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
+    notify("No history item to duplicate", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const item = items[i];
+  const t = item.text;
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (item.pinned) {
+    if (pinned.length >= PINNED_HISTORY_MAX) {
+      notify(`Pin limit ${PINNED_HISTORY_MAX} — unpin one first`, { force: true });
+      return { ok: false, error: "limit" };
+    }
+    // insert copy after original in pin list
+    const pi = pinned.indexOf(t);
+    if (pi < 0) return { ok: false, error: "missing" };
+    const next = pinned.slice();
+    next.splice(pi + 1, 0, t);
+    pinned = next.slice(0, PINNED_HISTORY_MAX);
+  } else {
+    // newest-first: put copy at front
+    hist = [t, ...hist].slice(0, historyMaxClamped());
+    lastTranscript = t;
+  }
+  persistHistoryStores(pinned, hist);
+  const after = flatHistory();
+  const newIndex = after.findIndex((x) => x.text === t);
+  notify("Duplicated history item", { force: true });
+  return {
+    ok: true,
+    index: newIndex >= 0 ? newIndex : i,
+    text: t,
+    remaining: after.length,
+  };
+}
+
+/**
  * Speak a history entry aloud (same TTS path as highlight-to-speak).
  */
 async function speakHistoryAt(index = 0) {
@@ -3614,6 +3736,14 @@ function rebuildTrayMenu() {
                   click: () => boostHistoryAt(i),
                 },
                 {
+                  label: "Merge with next",
+                  click: () => mergeHistoryWithNext(i),
+                },
+                {
+                  label: "Duplicate",
+                  click: () => duplicateHistoryAt(i),
+                },
+                {
                   label: "Save as snippet",
                   click: () => saveSnippetFromHistory(i),
                 },
@@ -3672,6 +3802,11 @@ function rebuildTrayMenu() {
             label: "Undo last dictation",
             enabled: !!String(lastTranscript || cfg?.history?.[0] || "").trim(),
             click: () => undoLastDictation(),
+          },
+          {
+            label: "Merge last two recents",
+            enabled: normalizeHistory(cfg?.history).length >= 2,
+            click: () => mergeLastTwoHistory(),
           },
           {
             label: "Clear recents (keep pins)",
@@ -3913,6 +4048,13 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("boost-history-at", (_e, index) =>
     boostHistoryAt(Number(index) || 0)
+  );
+  ipcMain.handle("merge-history-with-next", (_e, index) =>
+    mergeHistoryWithNext(Number(index) || 0)
+  );
+  ipcMain.handle("merge-last-two-history", () => mergeLastTwoHistory());
+  ipcMain.handle("duplicate-history-at", (_e, index) =>
+    duplicateHistoryAt(Number(index) || 0)
   );
   ipcMain.handle("get-snippets", () => getSnippets());
   ipcMain.handle("set-snippets", (_e, list) => setSnippets(list));

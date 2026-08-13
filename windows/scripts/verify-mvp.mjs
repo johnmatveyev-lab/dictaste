@@ -457,6 +457,15 @@ else fail("main missing NVIDIA NIM");
 if (/id="nvidia"|nvidiaPolishModel|NVIDIA Magpie/i.test(settings))
   pass("settings NVIDIA fields");
 else fail("settings missing NVIDIA fields");
+if (/mergeHistoryWithNext|duplicateHistoryAt|Merge last two/.test(main))
+  pass("main merge/duplicate history");
+else fail("main missing merge/duplicate history");
+if (/mergeHistoryWithNext|duplicateHistoryAt|mergeLastTwo|⧉|2×/.test(settings))
+  pass("settings merge/duplicate history");
+else fail("settings missing merge/duplicate history");
+if (/mergeHistoryWithNext|duplicateHistoryAt|mergeLastTwoHistory/.test(preload))
+  pass("preload merge/duplicate history");
+else fail("preload missing merge/duplicate history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld("dictaste", {
   moveHistoryAt: (index, delta) =>
     ipcRenderer.invoke("move-history-at", index, delta),
   boostHistoryAt: (index) => ipcRenderer.invoke("boost-history-at", index),
+  mergeHistoryWithNext: (index) =>
+    ipcRenderer.invoke("merge-history-with-next", index),
+  mergeLastTwoHistory: () => ipcRenderer.invoke("merge-last-two-history"),
+  duplicateHistoryAt: (index) =>
+    ipcRenderer.invoke("duplicate-history-at", index),
   getSnippets: () => ipcRenderer.invoke("get-snippets"),
   setSnippets: (list) => ipcRenderer.invoke("set-snippets", list),
   pasteSnippetAt: (index) => ipcRenderer.invoke("paste-snippet-at", index),

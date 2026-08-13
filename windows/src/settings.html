@@ -264,6 +264,7 @@
     <button id="pasteLast" class="ghost">Paste last transcript</button>
     <button id="repolishLast" class="ghost">Re-polish last</button>
     <button id="undoLast" class="ghost">Undo last dictation</button>
+    <button id="mergeLastTwo" class="ghost">Merge last two</button>
     <button id="copyDiag" class="ghost">Copy diagnostics</button>
     <button id="cancelDict" class="ghost">Cancel dictation</button>
     <button id="pauseHotkeys" class="ghost">Pause hotkeys</button>
@@ -656,6 +657,37 @@
             : (r?.error || 'Boost failed');
           await renderHistory();
         };
+        const mergeBtn = document.createElement('button');
+        mergeBtn.type = 'button';
+        mergeBtn.className = 'ghost';
+        mergeBtn.style.cssText = 'flex-shrink:0;padding:6px 8px;font-size:0.7rem;';
+        mergeBtn.textContent = '⧉';
+        mergeBtn.title = 'Merge with next (same section · uses append joiner)';
+        mergeBtn.onclick = async () => {
+          const r = await window.dictaste.mergeHistoryWithNext(i);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Merged · #' + ((r.index != null ? r.index : i) + 1))
+            : (r?.error === 'need_pair'
+              ? 'Need pair in same section'
+              : (r?.error === 'cross_section'
+                ? 'Same section only'
+                : (r?.error || 'Merge failed')));
+          if (r?.text) document.getElementById('text').value = r.text;
+          await renderHistory();
+        };
+        const dupBtn = document.createElement('button');
+        dupBtn.type = 'button';
+        dupBtn.className = 'ghost';
+        dupBtn.style.cssText = 'flex-shrink:0;padding:6px 8px;font-size:0.7rem;';
+        dupBtn.textContent = '2×';
+        dupBtn.title = 'Duplicate history item';
+        dupBtn.onclick = async () => {
+          const r = await window.dictaste.duplicateHistoryAt(i);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Duplicated · #' + ((r.index != null ? r.index : i) + 1))
+            : (r?.error || 'Duplicate failed');
+          await renderHistory();
+        };
         const speakBtn = document.createElement('button');
         speakBtn.type = 'button';
         speakBtn.className = 'ghost';
@@ -695,6 +727,8 @@
         wrap.appendChild(upBtn);
         wrap.appendChild(downBtn);
         wrap.appendChild(topBtn);
+        wrap.appendChild(mergeBtn);
+        wrap.appendChild(dupBtn);
         wrap.appendChild(speakBtn);
         wrap.appendChild(editBtn);
         wrap.appendChild(del);
@@ -1049,6 +1083,14 @@
         ? ('Re-polished · ' + (r.deliver || 'ok'))
         : (r?.error === 'empty' ? 'Nothing to re-polish yet' : (r?.error || 'Re-polish failed'));
       if (r?.text) document.getElementById('text').value = r.text;
+    };
+    document.getElementById('mergeLastTwo').onclick = async () => {
+      const r = await window.dictaste.mergeLastTwoHistory();
+      document.getElementById('status').textContent = r?.ok
+        ? ('Merged last two · #' + ((r.index != null ? r.index : 0) + 1))
+        : (r?.error === 'need_pair' ? 'Need two recents' : (r?.error || 'Merge failed'));
+      if (r?.text) document.getElementById('text').value = r.text;
+      await renderHistory();
     };
     document.getElementById('undoLast').onclick = async () => {
       const r = await window.dictaste.undoLastDictation();
