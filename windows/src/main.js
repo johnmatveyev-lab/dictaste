@@ -3255,6 +3255,89 @@ function wrapLast(kind = "quotes") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Identifier / case transforms for last transcript (dev-friendly).
+ * @param {"slug"|"snake"|"camel"|"pascal"|"constant"|"lower"|"upper"} kind
+ */
+function slugifyText(raw, kind = "slug") {
+  const t = String(raw || "").replace(/\r\n/g, "\n").trim();
+  if (!t) return "";
+  const words = t
+    .replace(/['’]/g, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return "";
+  const lowerWords = words.map((w) => w.toLowerCase());
+  switch (String(kind || "slug")) {
+    case "snake":
+      return lowerWords.join("_");
+    case "camel": {
+      return lowerWords
+        .map((w, i) =>
+          i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)
+        )
+        .join("");
+    }
+    case "pascal":
+      return lowerWords
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join("");
+    case "constant":
+      return lowerWords.join("_").toUpperCase();
+    case "lower":
+      return t.toLocaleLowerCase();
+    case "upper":
+      return t.toLocaleUpperCase();
+    case "slug":
+    default:
+      return lowerWords.join("-");
+  }
+}
+
+/**
+ * Slugify / case-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function slugifyLast(kind = "slug") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to slugify", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = slugifyText(src, kind);
+  if (!text) {
+    notify("Slugify produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4429,6 +4512,19 @@ function rebuildTrayMenu() {
         { label: "Blockquote", click: () => wrapLast("blockquote") },
       ],
     },
+    {
+      label: "Slugify last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "slug-case", click: () => slugifyLast("slug") },
+        { label: "snake_case", click: () => slugifyLast("snake") },
+        { label: "camelCase", click: () => slugifyLast("camel") },
+        { label: "PascalCase", click: () => slugifyLast("pascal") },
+        { label: "CONSTANT_CASE", click: () => slugifyLast("constant") },
+        { label: "lower case", click: () => slugifyLast("lower") },
+        { label: "UPPER CASE", click: () => slugifyLast("upper") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4633,6 +4729,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "quotes"),
       text: wrapText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("slugify-last", (_e, kind) =>
+    slugifyLast(String(kind || "slug"))
+  );
+  ipcMain.handle("slugify-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "slug"),
+      text: slugifyText(src, kind),
       source: src,
     };
   });

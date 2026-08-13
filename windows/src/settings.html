@@ -144,6 +144,17 @@
     <button type="button" id="wrapBlockquote" class="ghost">Blockquote</button>
   </div>
 
+  <label>Slugify last <span style="font-weight:400;color:var(--muted)">(slug · snake · camel · CONSTANT · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="slugifySlug" class="ghost">slug-case</button>
+    <button type="button" id="slugifySnake" class="ghost">snake_case</button>
+    <button type="button" id="slugifyCamel" class="ghost">camelCase</button>
+    <button type="button" id="slugifyPascal" class="ghost">PascalCase</button>
+    <button type="button" id="slugifyConstant" class="ghost">CONSTANT</button>
+    <button type="button" id="slugifyLower" class="ghost">lower</button>
+    <button type="button" id="slugifyUpper" class="ghost">UPPER</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1042,6 +1053,21 @@
     document.getElementById('wrapCode').onclick = () => wrapNow('code');
     document.getElementById('wrapCodeblock').onclick = () => wrapNow('codeblock');
     document.getElementById('wrapBlockquote').onclick = () => wrapNow('blockquote');
+    async function slugifyNow(kind) {
+      const r = await window.dictaste.slugifyLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Slugify failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('slugifySlug').onclick = () => slugifyNow('slug');
+    document.getElementById('slugifySnake').onclick = () => slugifyNow('snake');
+    document.getElementById('slugifyCamel').onclick = () => slugifyNow('camel');
+    document.getElementById('slugifyPascal').onclick = () => slugifyNow('pascal');
+    document.getElementById('slugifyConstant').onclick = () => slugifyNow('constant');
+    document.getElementById('slugifyLower').onclick = () => slugifyNow('lower');
+    document.getElementById('slugifyUpper').onclick = () => slugifyNow('upper');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
