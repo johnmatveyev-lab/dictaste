@@ -3184,6 +3184,77 @@ function reformatLast(kind = "single") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Wrap transcript in quotes / brackets / markdown fences.
+ * @param {"quotes"|"single-quotes"|"parens"|"brackets"|"braces"|"code"|"codeblock"|"blockquote"} kind
+ */
+function wrapText(raw, kind = "quotes") {
+  const t = String(raw || "").replace(/\r\n/g, "\n").trim();
+  if (!t) return "";
+  switch (String(kind || "quotes")) {
+    case "single-quotes":
+      return "'" + t.replace(/'/g, "\u2019") + "'";
+    case "parens":
+      return "(" + t + ")";
+    case "brackets":
+      return "[" + t + "]";
+    case "braces":
+      return "{" + t + "}";
+    case "code":
+      return "`" + t.replace(/`/g, "'") + "`";
+    case "codeblock":
+      return "```\n" + t + "\n```";
+    case "blockquote":
+      return t
+        .split("\n")
+        .map((line) => (line.length ? "> " + line : ">"))
+        .join("\n");
+    case "quotes":
+    default:
+      return '"' + t.replace(/"/g, "\u201d") + '"';
+  }
+}
+
+/**
+ * Wrap last transcript and paste. Updates lastTranscript + history[0] when matched.
+ */
+function wrapLast(kind = "quotes") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to wrap", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = wrapText(src, kind);
+  if (!text) {
+    notify("Wrap produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4344,6 +4415,20 @@ function rebuildTrayMenu() {
         },
       ],
     },
+    {
+      label: "Wrap last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Quotes", click: () => wrapLast("quotes") },
+        { label: "Single quotes", click: () => wrapLast("single-quotes") },
+        { label: "Parens", click: () => wrapLast("parens") },
+        { label: "Brackets", click: () => wrapLast("brackets") },
+        { label: "Braces", click: () => wrapLast("braces") },
+        { label: "Inline code", click: () => wrapLast("code") },
+        { label: "Code block", click: () => wrapLast("codeblock") },
+        { label: "Blockquote", click: () => wrapLast("blockquote") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4537,6 +4622,17 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "single"),
       text: reformatText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("wrap-last", (_e, kind) => wrapLast(String(kind || "quotes")));
+  ipcMain.handle("wrap-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "quotes"),
+      text: wrapText(src, kind),
       source: src,
     };
   });

@@ -512,6 +512,14 @@ if (/id="reformatSingle"|reformatLast|Reformat last/i.test(settings))
 else fail("settings missing reformat last");
 if (/reformatLast|reformatPreview/.test(preload)) pass("preload reformat last");
 else fail("preload missing reformat last");
+if (/wrapLast|wrapText|Wrap last/.test(main))
+  pass("main wrap last");
+else fail("main missing wrap last");
+if (/id="wrapQuotes"|wrapLast|Wrap last/i.test(settings))
+  pass("settings wrap last");
+else fail("settings missing wrap last");
+if (/wrapLast|wrapPreview/.test(preload)) pass("preload wrap last");
+else fail("preload missing wrap last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
