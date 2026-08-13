@@ -569,6 +569,14 @@ else fail("settings missing number lines last");
 if (/numberLinesLast|numberLinesPreview/.test(preload))
   pass("preload number lines last");
 else fail("preload missing number lines last");
+if (/extractLast|extractText|Extract last/.test(main))
+  pass("main extract last");
+else fail("main missing extract last");
+if (/id="extractUrls"|extractLast|Extract last/i.test(settings))
+  pass("settings extract last");
+else fail("settings missing extract last");
+if (/extractLast|extractPreview/.test(preload)) pass("preload extract last");
+else fail("preload missing extract last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

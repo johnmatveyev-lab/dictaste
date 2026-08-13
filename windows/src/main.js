@@ -3831,6 +3831,123 @@ function numberLinesLast(kind = "dot") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Extract structured tokens from last transcript (one per line, unique order-preserved).
+ * @param {"urls"|"emails"|"phones"|"hashtags"|"mentions"|"numbers"|"all"} kind
+ */
+function extractText(raw, kind = "urls") {
+  const t = String(raw || "");
+  if (!t.trim()) return "";
+  const uniq = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const x of arr) {
+      const k = String(x).trim();
+      if (!k) continue;
+      const key = k.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(k);
+    }
+    return out;
+  };
+  const urls =
+    t.match(
+      /\bhttps?:\/\/[^\s<>"'`)\]]+/gi
+    ) ||
+    t.match(/\bwww\.[^\s<>"'`)\]]+/gi) ||
+    [];
+  const emails = t.match(
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
+  ) || [];
+  // Phones: loose international / US-style
+  const phones = t.match(
+    /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}\b/g
+  ) || [];
+  const hashtags = t.match(/#[\p{L}\p{N}_]+/gu) || [];
+  const mentions = t.match(/@[\p{L}\p{N}_.]+/gu) || [];
+  // Numbers: integers/decimals (skip pure years-ish short? keep all 2+ digit)
+  const numbers = t.match(/(?<![\w.])-?\d+(?:\.\d+)?(?![\w.])/g) || [];
+  let items;
+  switch (String(kind || "urls")) {
+    case "emails":
+      items = emails;
+      break;
+    case "phones":
+      items = phones;
+      break;
+    case "hashtags":
+      items = hashtags;
+      break;
+    case "mentions":
+      items = mentions;
+      break;
+    case "numbers":
+      items = numbers;
+      break;
+    case "all": {
+      const blocks = [];
+      const u = uniq(urls.map((x) => x.replace(/[.,;:!?]+$/, "")));
+      const e = uniq(emails);
+      const p = uniq(phones);
+      if (u.length) blocks.push("URLs:\n" + u.join("\n"));
+      if (e.length) blocks.push("Emails:\n" + e.join("\n"));
+      if (p.length) blocks.push("Phones:\n" + p.join("\n"));
+      const h = uniq(hashtags);
+      const m = uniq(mentions);
+      if (h.length) blocks.push("Hashtags:\n" + h.join("\n"));
+      if (m.length) blocks.push("Mentions:\n" + m.join("\n"));
+      return blocks.join("\n\n");
+    }
+    case "urls":
+    default:
+      items = urls.map((x) => x.replace(/[.,;:!?]+$/, ""));
+      break;
+  }
+  return uniq(items).join("\n");
+}
+
+/**
+ * Extract tokens from last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function extractLast(kind = "urls") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to extract from", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = extractText(src, kind);
+  if (!text) {
+    notify("Nothing found to extract", { force: true });
+    return { ok: false, error: "none" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -5077,6 +5194,19 @@ function rebuildTrayMenu() {
         { label: "Strip numbers", click: () => numberLinesLast("strip") },
       ],
     },
+    {
+      label: "Extract last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "URLs", click: () => extractLast("urls") },
+        { label: "Emails", click: () => extractLast("emails") },
+        { label: "Phones", click: () => extractLast("phones") },
+        { label: "Hashtags", click: () => extractLast("hashtags") },
+        { label: "Mentions", click: () => extractLast("mentions") },
+        { label: "Numbers", click: () => extractLast("numbers") },
+        { label: "All (grouped)", click: () => extractLast("all") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5367,6 +5497,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "dot"),
       text: numberLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("extract-last", (_e, kind) =>
+    extractLast(String(kind || "urls"))
+  );
+  ipcMain.handle("extract-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "urls"),
+      text: extractText(src, kind),
       source: src,
     };
   });
