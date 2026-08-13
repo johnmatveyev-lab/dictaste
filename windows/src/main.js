@@ -3948,6 +3948,97 @@ function extractLast(kind = "urls") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Count words / chars / lines / sentences / reading time for last transcript.
+ * @param {"full"|"words"|"chars"|"lines"|"sentences"|"compact"|"reading"} kind
+ */
+function statsText(raw, kind = "full") {
+  const t = String(raw || "");
+  const chars = t.length;
+  const charsNoSpace = t.replace(/\s/g, "").length;
+  const lines = t.length ? t.split(/\r\n|\r|\n/).length : 0;
+  const nonEmptyLines = t
+    .split(/\r\n|\r|\n/)
+    .filter((l) => l.trim().length > 0).length;
+  const wordsMatch = t.match(/[^\s]+/g);
+  const words = wordsMatch ? wordsMatch.length : 0;
+  const sentenceParts = t
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const sentences = sentenceParts.length || (t.trim() ? 1 : 0);
+  const readingMin = words > 0 ? Math.max(0.1, words / 200) : 0;
+  const readingLabel =
+    readingMin < 1
+      ? `~${Math.max(1, Math.round(readingMin * 60))}s read`
+      : `~${readingMin < 10 ? readingMin.toFixed(1) : Math.round(readingMin)} min read`;
+
+  switch (String(kind || "full")) {
+    case "words":
+      return String(words);
+    case "chars":
+      return String(chars);
+    case "lines":
+      return String(lines);
+    case "sentences":
+      return String(sentences);
+    case "reading":
+      return readingLabel;
+    case "compact":
+      return `${words} words · ${chars} chars · ${lines} lines · ${readingLabel}`;
+    case "full":
+    default:
+      return [
+        `Words: ${words}`,
+        `Characters: ${chars} (${charsNoSpace} no spaces)`,
+        `Lines: ${lines} (${nonEmptyLines} non-empty)`,
+        `Sentences: ${sentences}`,
+        `Reading time: ${readingLabel}`,
+      ].join("\n");
+  }
+}
+
+/**
+ * Stats for last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function statsLast(kind = "full") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to count", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = statsText(src, kind);
+  if (!text) {
+    notify("Nothing to count", { force: true });
+    return { ok: false, error: "none" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -5207,6 +5298,19 @@ function rebuildTrayMenu() {
         { label: "All (grouped)", click: () => extractLast("all") },
       ],
     },
+    {
+      label: "Stats last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Full summary", click: () => statsLast("full") },
+        { label: "Compact one-liner", click: () => statsLast("compact") },
+        { label: "Words only", click: () => statsLast("words") },
+        { label: "Chars only", click: () => statsLast("chars") },
+        { label: "Lines only", click: () => statsLast("lines") },
+        { label: "Sentences only", click: () => statsLast("sentences") },
+        { label: "Reading time", click: () => statsLast("reading") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5510,6 +5614,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "urls"),
       text: extractText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("stats-last", (_e, kind) =>
+    statsLast(String(kind || "full"))
+  );
+  ipcMain.handle("stats-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "full"),
+      text: statsText(src, kind),
       source: src,
     };
   });

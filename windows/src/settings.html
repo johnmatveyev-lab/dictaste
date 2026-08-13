@@ -215,6 +215,17 @@
     <button type="button" id="extractAll" class="ghost">All</button>
   </div>
 
+  <label>Stats last <span style="font-weight:400;color:var(--muted)">(words · chars · lines · sentences · reading time · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="statsFull" class="ghost">Full</button>
+    <button type="button" id="statsCompact" class="ghost">Compact</button>
+    <button type="button" id="statsWords" class="ghost">Words</button>
+    <button type="button" id="statsChars" class="ghost">Chars</button>
+    <button type="button" id="statsLines" class="ghost">Lines</button>
+    <button type="button" id="statsSentences" class="ghost">Sentences</button>
+    <button type="button" id="statsReading" class="ghost">Reading time</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1212,6 +1223,21 @@
     document.getElementById('extractMentions').onclick = () => extractNow('mentions');
     document.getElementById('extractNumbers').onclick = () => extractNow('numbers');
     document.getElementById('extractAll').onclick = () => extractNow('all');
+    async function statsNow(kind) {
+      const r = await window.dictaste.statsLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Stats failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('statsFull').onclick = () => statsNow('full');
+    document.getElementById('statsCompact').onclick = () => statsNow('compact');
+    document.getElementById('statsWords').onclick = () => statsNow('words');
+    document.getElementById('statsChars').onclick = () => statsNow('chars');
+    document.getElementById('statsLines').onclick = () => statsNow('lines');
+    document.getElementById('statsSentences').onclick = () => statsNow('sentences');
+    document.getElementById('statsReading').onclick = () => statsNow('reading');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

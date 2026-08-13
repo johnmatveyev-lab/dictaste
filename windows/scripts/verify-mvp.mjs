@@ -577,6 +577,14 @@ if (/id="extractUrls"|extractLast|Extract last/i.test(settings))
 else fail("settings missing extract last");
 if (/extractLast|extractPreview/.test(preload)) pass("preload extract last");
 else fail("preload missing extract last");
+if (/statsLast|statsText|Stats last/.test(main))
+  pass("main stats last");
+else fail("main missing stats last");
+if (/id="statsFull"|statsLast|Stats last/i.test(settings))
+  pass("settings stats last");
+else fail("settings missing stats last");
+if (/statsLast|statsPreview/.test(preload)) pass("preload stats last");
+else fail("preload missing stats last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
