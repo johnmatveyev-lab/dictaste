@@ -585,6 +585,15 @@ if (/id="statsFull"|statsLast|Stats last/i.test(settings))
 else fail("settings missing stats last");
 if (/statsLast|statsPreview/.test(preload)) pass("preload stats last");
 else fail("preload missing stats last");
+if (/filterLinesLast|filterLinesText|Filter lines last/.test(main))
+  pass("main filter lines last");
+else fail("main missing filter lines last");
+if (/id="filterDropBlank"|filterLinesLast|Filter lines last/i.test(settings))
+  pass("settings filter lines last");
+else fail("settings missing filter lines last");
+if (/filterLinesLast|filterLinesPreview/.test(preload))
+  pass("preload filter lines last");
+else fail("preload missing filter lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

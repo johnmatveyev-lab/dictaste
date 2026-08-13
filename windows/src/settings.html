@@ -226,6 +226,17 @@
     <button type="button" id="statsReading" class="ghost">Reading time</button>
   </div>
 
+  <label>Filter lines last <span style="font-weight:400;color:var(--muted)">(drop blank · trim · collapse · short · comments · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="filterDropBlank" class="ghost">Drop blank</button>
+    <button type="button" id="filterDropEmpty" class="ghost">Drop empty</button>
+    <button type="button" id="filterTrim" class="ghost">Trim</button>
+    <button type="button" id="filterCollapse" class="ghost">Collapse</button>
+    <button type="button" id="filterDropShort" class="ghost">Drop short</button>
+    <button type="button" id="filterKeepText" class="ghost">Keep text</button>
+    <button type="button" id="filterDropComments" class="ghost">Drop comments</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1238,6 +1249,21 @@
     document.getElementById('statsLines').onclick = () => statsNow('lines');
     document.getElementById('statsSentences').onclick = () => statsNow('sentences');
     document.getElementById('statsReading').onclick = () => statsNow('reading');
+    async function filterLinesNow(kind) {
+      const r = await window.dictaste.filterLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Filter failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('filterDropBlank').onclick = () => filterLinesNow('drop-blank');
+    document.getElementById('filterDropEmpty').onclick = () => filterLinesNow('drop-empty');
+    document.getElementById('filterTrim').onclick = () => filterLinesNow('trim');
+    document.getElementById('filterCollapse').onclick = () => filterLinesNow('collapse');
+    document.getElementById('filterDropShort').onclick = () => filterLinesNow('drop-short');
+    document.getElementById('filterKeepText').onclick = () => filterLinesNow('keep-text');
+    document.getElementById('filterDropComments').onclick = () => filterLinesNow('drop-comments');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

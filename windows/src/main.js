@@ -4039,6 +4039,113 @@ function statsLast(kind = "full") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Filter / clean lines of last transcript.
+ * @param {"drop-empty"|"drop-blank"|"trim"|"collapse"|"drop-short"|"keep-text"|"drop-comments"} kind
+ */
+function filterLinesText(raw, kind = "drop-blank") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  let lines = t.split(/\r\n|\r|\n/);
+  switch (String(kind || "drop-blank")) {
+    case "drop-empty":
+      lines = lines.filter((l) => l.length > 0);
+      break;
+    case "trim":
+      lines = lines.map((l) => l.trimEnd());
+      // also trim leading common indent? keep left content — only trailing
+      break;
+    case "collapse": {
+      const out = [];
+      let blankRun = false;
+      for (const l of lines) {
+        const blank = !l.trim();
+        if (blank) {
+          if (!blankRun) out.push("");
+          blankRun = true;
+        } else {
+          out.push(l);
+          blankRun = false;
+        }
+      }
+      // trim leading/trailing blank lines
+      while (out.length && !out[0].trim()) out.shift();
+      while (out.length && !out[out.length - 1].trim()) out.pop();
+      lines = out;
+      break;
+    }
+    case "drop-short":
+      lines = lines.filter((l) => l.trim().length >= 3);
+      break;
+    case "keep-text":
+      lines = lines.filter((l) => /[\p{L}\p{N}]/u.test(l));
+      break;
+    case "drop-comments":
+      lines = lines.filter((l) => {
+        const s = l.trim();
+        if (!s) return true;
+        if (s.startsWith("#") || s.startsWith("//") || s.startsWith(";"))
+          return false;
+        return true;
+      });
+      break;
+    case "drop-blank":
+    default:
+      lines = lines.filter((l) => l.trim().length > 0);
+      break;
+  }
+  return lines.join(eol);
+}
+
+/**
+ * Filter lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function filterLinesLast(kind = "drop-blank") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to filter", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = filterLinesText(src, kind);
+  if (!String(text || "").trim() && String(kind || "") !== "drop-empty") {
+    // allow empty result for aggressive filters, but notify
+    if (!text) {
+      notify("Filter removed all lines", { force: true });
+      return { ok: false, error: "none" };
+    }
+  }
+  if (text === src) {
+    notify("Filter made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -5311,6 +5418,19 @@ function rebuildTrayMenu() {
         { label: "Reading time", click: () => statsLast("reading") },
       ],
     },
+    {
+      label: "Filter lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Drop blank lines", click: () => filterLinesLast("drop-blank") },
+        { label: "Drop empty lines", click: () => filterLinesLast("drop-empty") },
+        { label: "Trim trailing space", click: () => filterLinesLast("trim") },
+        { label: "Collapse blank runs", click: () => filterLinesLast("collapse") },
+        { label: "Drop short lines (<3)", click: () => filterLinesLast("drop-short") },
+        { label: "Keep lines with text", click: () => filterLinesLast("keep-text") },
+        { label: "Drop comments (# // ;)", click: () => filterLinesLast("drop-comments") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5627,6 +5747,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "full"),
       text: statsText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("filter-lines-last", (_e, kind) =>
+    filterLinesLast(String(kind || "drop-blank"))
+  );
+  ipcMain.handle("filter-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "drop-blank"),
+      text: filterLinesText(src, kind),
       source: src,
     };
   });
