@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Edit history item · read history aloud (TTS)
  * - History search · copy all history · tray plan/usage · delete item
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
@@ -1689,6 +1690,54 @@ function copyAllHistory() {
   return { ok: true, count: hist.length };
 }
 
+/**
+ * Replace a history entry in place (0 = newest). Empty text deletes the item.
+ */
+function updateHistoryAt(index = 0, text = "") {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const hist = normalizeHistory(cfg?.history);
+  if (!hist.length || i >= hist.length) {
+    notify("No history item to edit", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const nextText = String(text || "").trim();
+  if (!nextText) {
+    return deleteHistoryAt(i);
+  }
+  const next = hist.slice();
+  next[i] = nextText;
+  if (i === 0 || String(lastTranscript || "").trim() === String(hist[i] || "").trim()) {
+    lastTranscript = nextText;
+  }
+  cfg = { ...cfg, history: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  const preview =
+    nextText.length > 48 ? nextText.slice(0, 45) + "…" : nextText;
+  notify(`Updated history #${i + 1} · ${preview}`, { force: true });
+  return { ok: true, index: i, text: nextText, remaining: next.length };
+}
+
+/**
+ * Speak a history entry aloud (same TTS path as highlight-to-speak).
+ */
+async function speakHistoryAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const hist = normalizeHistory(cfg?.history);
+  const t = String(
+    hist[i] || (i === 0 ? lastTranscript : "") || ""
+  ).trim();
+  if (!t) {
+    notify("No history item to read", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  return speakReadText(t);
+}
+
 async function refreshPlanCache({ rebuild = true, force = false } = {}) {
   if (planRefreshInFlight) return cachedPlanLabel;
   const now = Date.now();
@@ -3000,6 +3049,29 @@ function rebuildTrayMenu() {
                 click: () => copyLastTranscript(i),
               },
               {
+                label: "Read aloud",
+                click: () => {
+                  speakHistoryAt(i).catch(() => {});
+                },
+              },
+              {
+                label: "Edit in Settings…",
+                click: () => {
+                  openSettings();
+                  try {
+                    if (settingsWin && !settingsWin.isDestroyed()) {
+                      settingsWin.webContents.send("status", {
+                        phase: "idle",
+                        editHistoryIndex: i,
+                        editHistoryText: t,
+                      });
+                    }
+                  } catch {
+                    /* ignore */
+                  }
+                },
+              },
+              {
                 label: "Re-polish & paste",
                 enabled: !hotkeysPaused,
                 click: () => {
@@ -3245,6 +3317,12 @@ app.whenReady().then(() => {
   ipcMain.handle("undo-last-dictation", () => undoLastDictation());
   ipcMain.handle("delete-history-at", (_e, index) =>
     deleteHistoryAt(Number(index) || 0)
+  );
+  ipcMain.handle("update-history-at", (_e, index, text) =>
+    updateHistoryAt(Number(index) || 0, text)
+  );
+  ipcMain.handle("speak-history-at", async (_e, index) =>
+    speakHistoryAt(Number(index) || 0)
   );
   ipcMain.handle("repolish-last", async (_e, index) =>
     repolishLast(Number(index) || 0)

@@ -35,6 +35,7 @@ for (const f of need) {
 
 const main = readFileSync(resolve(root, "src/main.js"), "utf8");
 const settings = readFileSync(resolve(root, "src/settings.html"), "utf8");
+const preload = readFileSync(resolve(root, "src/preload.js"), "utf8");
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 
 if (pkg.productName === "Dictaste" || pkg.build?.productName === "Dictaste") pass("productName Dictaste");
@@ -422,6 +423,15 @@ if (/refreshPlanCache|cachedPlanLabel|Refresh plan/.test(main)) pass("main tray 
 else fail("main missing tray plan usage");
 if (/historyFilter|Filter history/i.test(settings)) pass("settings history filter");
 else fail("settings missing history filter");
+if (/updateHistoryAt|Edit in Settings/.test(main)) pass("main edit history item");
+else fail("main missing edit history item");
+if (/speakHistoryAt|Read aloud/.test(main)) pass("main speak history item");
+else fail("main missing speak history item");
+if (/historyEditBar|historyEditSave|speakHistoryAt|updateHistoryAt/i.test(settings))
+  pass("settings edit/speak history");
+else fail("settings missing edit/speak history");
+if (/updateHistoryAt|speakHistoryAt/.test(preload)) pass("preload edit/speak history");
+else fail("preload missing edit/speak history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
