@@ -4146,6 +4146,99 @@ function filterLinesLast(kind = "drop-blank") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+/**
+ * Join non-empty lines of last transcript with a separator.
+ * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
+ */
+function joinLinesText(raw, kind = "space") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const parts = t
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (!parts.length) return "";
+  let sep;
+  switch (String(kind || "space")) {
+    case "comma":
+      sep = ",";
+      break;
+    case "comma-space":
+      sep = ", ";
+      break;
+    case "semicolon":
+      sep = "; ";
+      break;
+    case "pipe":
+      sep = " | ";
+      break;
+    case "slash":
+      sep = " / ";
+      break;
+    case "and": {
+      if (parts.length === 1) return parts[0];
+      if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+      return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+    }
+    case "newline":
+      sep = "\n";
+      break;
+    case "concat":
+      sep = "";
+      break;
+    case "space":
+    default:
+      sep = " ";
+      break;
+  }
+  return parts.join(sep);
+}
+
+/**
+ * Join lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function joinLinesLast(kind = "space") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to join", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = joinLinesText(src, kind);
+  if (!text) {
+    notify("Nothing to join", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Join made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -5431,6 +5524,21 @@ function rebuildTrayMenu() {
         { label: "Drop comments (# // ;)", click: () => filterLinesLast("drop-comments") },
       ],
     },
+    {
+      label: "Join lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Space", click: () => joinLinesLast("space") },
+        { label: "Comma + space", click: () => joinLinesLast("comma-space") },
+        { label: "Comma", click: () => joinLinesLast("comma") },
+        { label: "Semicolon", click: () => joinLinesLast("semicolon") },
+        { label: "Pipe |", click: () => joinLinesLast("pipe") },
+        { label: "Slash /", click: () => joinLinesLast("slash") },
+        { label: "Oxford and", click: () => joinLinesLast("and") },
+        { label: "Newline (trim)", click: () => joinLinesLast("newline") },
+        { label: "Concat (no sep)", click: () => joinLinesLast("concat") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5760,6 +5868,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "drop-blank"),
       text: filterLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("join-lines-last", (_e, kind) =>
+    joinLinesLast(String(kind || "space"))
+  );
+  ipcMain.handle("join-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "space"),
+      text: joinLinesText(src, kind),
       source: src,
     };
   });

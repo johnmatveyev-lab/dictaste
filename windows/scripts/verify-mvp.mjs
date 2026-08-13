@@ -594,6 +594,15 @@ else fail("settings missing filter lines last");
 if (/filterLinesLast|filterLinesPreview/.test(preload))
   pass("preload filter lines last");
 else fail("preload missing filter lines last");
+if (/joinLinesLast|joinLinesText|Join lines last/.test(main))
+  pass("main join lines last");
+else fail("main missing join lines last");
+if (/id="joinSpace"|joinLinesLast|Join lines last/i.test(settings))
+  pass("settings join lines last");
+else fail("settings missing join lines last");
+if (/joinLinesLast|joinLinesPreview/.test(preload))
+  pass("preload join lines last");
+else fail("preload missing join lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -237,6 +237,19 @@
     <button type="button" id="filterDropComments" class="ghost">Drop comments</button>
   </div>
 
+  <label>Join lines last <span style="font-weight:400;color:var(--muted)">(space · comma · ; · | · and · concat · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="joinSpace" class="ghost">Space</button>
+    <button type="button" id="joinCommaSpace" class="ghost">, space</button>
+    <button type="button" id="joinComma" class="ghost">Comma</button>
+    <button type="button" id="joinSemicolon" class="ghost">;</button>
+    <button type="button" id="joinPipe" class="ghost">|</button>
+    <button type="button" id="joinSlash" class="ghost">/</button>
+    <button type="button" id="joinAnd" class="ghost">and</button>
+    <button type="button" id="joinNewline" class="ghost">Newline</button>
+    <button type="button" id="joinConcat" class="ghost">Concat</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1264,6 +1277,23 @@
     document.getElementById('filterDropShort').onclick = () => filterLinesNow('drop-short');
     document.getElementById('filterKeepText').onclick = () => filterLinesNow('keep-text');
     document.getElementById('filterDropComments').onclick = () => filterLinesNow('drop-comments');
+    async function joinLinesNow(kind) {
+      const r = await window.dictaste.joinLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Join failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('joinSpace').onclick = () => joinLinesNow('space');
+    document.getElementById('joinCommaSpace').onclick = () => joinLinesNow('comma-space');
+    document.getElementById('joinComma').onclick = () => joinLinesNow('comma');
+    document.getElementById('joinSemicolon').onclick = () => joinLinesNow('semicolon');
+    document.getElementById('joinPipe').onclick = () => joinLinesNow('pipe');
+    document.getElementById('joinSlash').onclick = () => joinLinesNow('slash');
+    document.getElementById('joinAnd').onclick = () => joinLinesNow('and');
+    document.getElementById('joinNewline').onclick = () => joinLinesNow('newline');
+    document.getElementById('joinConcat').onclick = () => joinLinesNow('concat');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
