@@ -504,6 +504,14 @@ if (/id="pasteUuid"|pasteId|Paste UUID \/ ID/i.test(settings))
 else fail("settings missing paste UUID/ID");
 if (/pasteId|generateId/.test(preload)) pass("preload paste UUID/ID");
 else fail("preload missing paste UUID/ID");
+if (/reformatLast|reformatText|Reformat last/.test(main))
+  pass("main reformat last");
+else fail("main missing reformat last");
+if (/id="reformatSingle"|reformatLast|Reformat last/i.test(settings))
+  pass("settings reformat last");
+else fail("settings missing reformat last");
+if (/reformatLast|reformatPreview/.test(preload)) pass("preload reformat last");
+else fail("preload missing reformat last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

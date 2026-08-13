@@ -3087,6 +3087,103 @@ function pasteId(kind = "uuid") {
   return { ok: true, text, kind, deliver: del.mode };
 }
 
+/** Latest dictation text for reformat-last helper. */
+function getLatestTranscript() {
+  const pinned = normalizePinned(cfg?.pinnedHistory);
+  const hist = normalizeHistory(cfg?.history);
+  return String(lastTranscript || hist[0] || pinned[0] || "").trim();
+}
+
+/**
+ * Reformat transcript text.
+ * @param {"single"|"bullets"|"numbered"|"paragraphs"|"trim"} kind
+ */
+function reformatText(raw, kind = "single") {
+  const t = String(raw || "").replace(/\r\n/g, "\n").trim();
+  if (!t) return "";
+  const splitItems = (s) => {
+    // Prefer existing lines; else sentence-ish splits
+    const lines = s.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+    if (lines.length > 1) return lines;
+    return s
+      .split(/(?<=[.!?…])\s+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+  };
+  const stripBullet = (p) =>
+    p.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim();
+  switch (String(kind || "single")) {
+    case "bullets": {
+      return splitItems(t)
+        .map((p) => `- ${stripBullet(p)}`)
+        .join("\n");
+    }
+    case "numbered": {
+      return splitItems(t)
+        .map((p, i) => `${i + 1}. ${stripBullet(p)}`)
+        .join("\n");
+    }
+    case "paragraphs": {
+      return t
+        .replace(/\s+/g, " ")
+        .replace(/([.!?…])\s+/g, "$1\n\n")
+        .trim();
+    }
+    case "trim": {
+      return t
+        .split("\n")
+        .map((l) => l.replace(/[ \t]+$/g, "").replace(/^[ \t]+/g, ""))
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+    case "single":
+    default:
+      return t.replace(/\s+/g, " ").trim();
+  }
+}
+
+/**
+ * Reformat last transcript and paste. Updates lastTranscript + history[0] when matched.
+ * Does not push a new history entry.
+ */
+function reformatLast(kind = "single") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to reformat", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = reformatText(src, kind);
+  if (!text) {
+    notify("Reformat produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4221,6 +4318,32 @@ function rebuildTrayMenu() {
         },
       ],
     },
+    {
+      label: "Reformat last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        {
+          label: "Single line",
+          click: () => reformatLast("single"),
+        },
+        {
+          label: "Bullets",
+          click: () => reformatLast("bullets"),
+        },
+        {
+          label: "Numbered list",
+          click: () => reformatLast("numbered"),
+        },
+        {
+          label: "Paragraphs",
+          click: () => reformatLast("paragraphs"),
+        },
+        {
+          label: "Trim lines",
+          click: () => reformatLast("trim"),
+        },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4404,6 +4527,19 @@ app.whenReady().then(() => {
     kind: String(kind || "uuid"),
     text: generateId(kind),
   }));
+  ipcMain.handle("reformat-last", (_e, kind) =>
+    reformatLast(String(kind || "single"))
+  );
+  ipcMain.handle("reformat-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "single"),
+      text: reformatText(src, kind),
+      source: src,
+    };
+  });
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
       Number(index) || 0,

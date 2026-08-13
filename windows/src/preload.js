@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   formatNow: (kind) => ipcRenderer.invoke("format-now", kind),
   pasteId: (kind) => ipcRenderer.invoke("paste-id", kind),
   generateId: (kind) => ipcRenderer.invoke("generate-id", kind),
+  reformatLast: (kind) => ipcRenderer.invoke("reformat-last", kind),
+  reformatPreview: (kind) => ipcRenderer.invoke("reformat-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

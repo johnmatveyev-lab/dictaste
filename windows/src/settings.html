@@ -123,6 +123,15 @@
     <button type="button" id="pasteUuidShort" class="ghost">Short 8</button>
   </div>
 
+  <label>Reformat last <span style="font-weight:400;color:var(--muted)">(paste into focused app · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="reformatSingle" class="ghost">Single line</button>
+    <button type="button" id="reformatBullets" class="ghost">Bullets</button>
+    <button type="button" id="reformatNumbered" class="ghost">Numbered</button>
+    <button type="button" id="reformatParagraphs" class="ghost">Paragraphs</button>
+    <button type="button" id="reformatTrim" class="ghost">Trim lines</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -992,6 +1001,19 @@
     document.getElementById('pasteUuidUpper').onclick = () => pasteIdNow('uuid-upper');
     document.getElementById('pasteUuidCompact').onclick = () => pasteIdNow('compact');
     document.getElementById('pasteUuidShort').onclick = () => pasteIdNow('short');
+    async function reformatNow(kind) {
+      const r = await window.dictaste.reformatLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Reformat failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('reformatSingle').onclick = () => reformatNow('single');
+    document.getElementById('reformatBullets').onclick = () => reformatNow('bullets');
+    document.getElementById('reformatNumbered').onclick = () => reformatNow('numbered');
+    document.getElementById('reformatParagraphs').onclick = () => reformatNow('paragraphs');
+    document.getElementById('reformatTrim').onclick = () => reformatNow('trim');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
