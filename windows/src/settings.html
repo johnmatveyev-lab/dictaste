@@ -105,6 +105,16 @@
     <button type="button" id="saveLastSnippet" class="ghost">Save last transcript as snippet</button>
   </div>
 
+  <label>Paste date / time <span style="font-weight:400;color:var(--muted)">(into focused app · uses auto-paste / privacy rules)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="pasteDateTime" class="ghost">Date + time</button>
+    <button type="button" id="pasteDate" class="ghost">Date</button>
+    <button type="button" id="pasteTime" class="ghost">Time</button>
+    <button type="button" id="pasteLocal" class="ghost">Local</button>
+    <button type="button" id="pasteIso" class="ghost">ISO</button>
+    <button type="button" id="pasteFilename" class="ghost">Filename stamp</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -950,6 +960,19 @@
         document.getElementById('snippets').value = r.snippets.join('\n');
       }
     };
+    async function pasteNow(kind) {
+      const r = await window.dictaste.pasteDateTime(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (r.text || kind))
+        : (r?.error || 'Paste date/time failed');
+      if (r?.text) document.getElementById('text').value = r.text;
+    }
+    document.getElementById('pasteDateTime').onclick = () => pasteNow('datetime');
+    document.getElementById('pasteDate').onclick = () => pasteNow('date');
+    document.getElementById('pasteTime').onclick = () => pasteNow('time');
+    document.getElementById('pasteLocal').onclick = () => pasteNow('local');
+    document.getElementById('pasteIso').onclick = () => pasteNow('iso');
+    document.getElementById('pasteFilename').onclick = () => pasteNow('filename');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

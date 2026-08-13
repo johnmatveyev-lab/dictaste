@@ -488,6 +488,14 @@ else fail("main missing clear clipboard privacy");
 if (/id="clearClipboardAfter"|Clear clipboard after paste/i.test(settings))
   pass("settings clear clipboard privacy");
 else fail("settings missing clear clipboard privacy");
+if (/pasteDateTime|formatNow|Paste date \/ time/.test(main))
+  pass("main paste date/time");
+else fail("main missing paste date/time");
+if (/id="pasteDateTime"|pasteDateTime|Paste date \/ time/i.test(settings))
+  pass("settings paste date/time");
+else fail("settings missing paste date/time");
+if (/pasteDateTime|formatNow/.test(preload)) pass("preload paste date/time");
+else fail("preload missing paste date/time");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

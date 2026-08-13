@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   testOpenAIKey: () => ipcRenderer.invoke("test-openai-key"),
   getUsageStats: () => ipcRenderer.invoke("get-usage-stats"),
   resetUsageStats: () => ipcRenderer.invoke("reset-usage-stats"),
+  pasteDateTime: (kind) => ipcRenderer.invoke("paste-date-time", kind),
+  formatNow: (kind) => ipcRenderer.invoke("format-now", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

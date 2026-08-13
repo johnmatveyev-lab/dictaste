@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Paste current date/time (tray + Settings)
  * - Privacy: clear clipboard after paste/copy
  * - Local session stats (words + dictations today)
  * - Test NVIDIA / OpenAI BYO key connection
@@ -2991,6 +2992,56 @@ function deliverText(text) {
   return { mode: "clipboard", words };
 }
 
+/**
+ * Format current moment for paste-date/time helper.
+ * @param {"datetime"|"date"|"time"|"iso"|"filename"} kind
+ */
+function formatNow(kind = "datetime") {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  switch (String(kind || "datetime")) {
+    case "date":
+      return `${yyyy}-${mm}-${dd}`;
+    case "time":
+      return `${hh}:${mi}`;
+    case "iso":
+      return d.toISOString();
+    case "filename":
+      return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+    case "local":
+      try {
+        return d.toLocaleString();
+      } catch {
+        return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+      }
+    case "datetime":
+    default:
+      return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  }
+}
+
+/**
+ * Paste (or clipboard-deliver) a timestamp. Does not push dictation history.
+ */
+function pasteDateTime(kind = "datetime") {
+  const text = formatNow(kind);
+  if (!text) {
+    notify("Could not format date/time", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4073,6 +4124,36 @@ function rebuildTrayMenu() {
         ];
       })(),
     },
+    {
+      label: "Paste date / time",
+      enabled: !hotkeysPaused,
+      submenu: [
+        {
+          label: `Date + time · ${formatNow("datetime")}`,
+          click: () => pasteDateTime("datetime"),
+        },
+        {
+          label: `Local · ${formatNow("local")}`,
+          click: () => pasteDateTime("local"),
+        },
+        {
+          label: `Date · ${formatNow("date")}`,
+          click: () => pasteDateTime("date"),
+        },
+        {
+          label: `Time · ${formatNow("time")}`,
+          click: () => pasteDateTime("time"),
+        },
+        {
+          label: `ISO · ${formatNow("iso")}`,
+          click: () => pasteDateTime("iso"),
+        },
+        {
+          label: `Filename · ${formatNow("filename")}`,
+          click: () => pasteDateTime("filename"),
+        },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -4242,6 +4323,14 @@ app.whenReady().then(() => {
   ipcMain.handle("test-openai-key", async () => testOpenAIKey());
   ipcMain.handle("get-usage-stats", () => getUsageStats());
   ipcMain.handle("reset-usage-stats", () => resetUsageStats());
+  ipcMain.handle("paste-date-time", (_e, kind) =>
+    pasteDateTime(String(kind || "datetime"))
+  );
+  ipcMain.handle("format-now", (_e, kind) => ({
+    ok: true,
+    kind: String(kind || "datetime"),
+    text: formatNow(kind),
+  }));
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
       Number(index) || 0,
