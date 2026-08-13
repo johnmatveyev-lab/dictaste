@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Privacy: clear clipboard after paste/copy
  * - Local session stats (words + dictations today)
  * - Test NVIDIA / OpenAI BYO key connection
  * - Merge history with next · duplicate history item
@@ -81,6 +82,11 @@ function defaultConfig() {
     licenseKey: "",
     polish: true,
     autoPaste: true,
+    /**
+     * Privacy: after auto-paste, restore empty clipboard (not prior contents).
+     * After clipboard-only deliver, clear clipboard after a short delay.
+     */
+    clearClipboardAfter: false,
     /**
      * Appended after polished dictation before paste.
      * "" | " " | "\\n" | ". " (period+space)
@@ -466,6 +472,7 @@ const SETTINGS_EXPORT_KEYS = [
   "apiBase",
   "polish",
   "autoPaste",
+  "clearClipboardAfter",
   "pasteSuffix",
   "pasteDelayMs",
   "silenceTimeoutMs",
@@ -2550,7 +2557,7 @@ function copySupportDiagnostics() {
     `Polish: ${cfg?.polish !== false ? "on" : "off"} · minWordsPolish ${minWordsForPolishClamped()} · minWordsRead ${minWordsForReadClamped()}`,
     `Hotkeys: dictate ${toDisplayHotkey(hotkeyDictateAccel())} · read ${toDisplayHotkey(hotkeyReadAccel())} · polish ${toDisplayHotkey(hotkeyPolishAccel())} · cancel ${toDisplayHotkey(hotkeyCancelAccel())} · paste-last ${toDisplayHotkey(hotkeyPasteLastAccel())}`,
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
-    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · append: ${cfg?.appendDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
+    `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · clear-clipboard: ${cfg?.clearClipboardAfter ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · append: ${cfg?.appendDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
     `History: ${flatTexts().length} (${normalizePinned(cfg?.pinnedHistory).length}★ / ${historyMaxClamped()} recents)`,
     `Local stats: ${usageStatsLabel()} (${getUsageStats().day})`,
     `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
@@ -2819,17 +2826,48 @@ function maxDictationMsClamped() {
   return Math.max(0, Math.min(600000, Math.round(n)));
 }
 
+/** After paste/copy, optionally wipe clipboard for privacy. */
+let clearClipboardTimer = null;
+
+function scheduleClearClipboard(delayMs = 2500) {
+  if (clearClipboardTimer) {
+    try {
+      clearTimeout(clearClipboardTimer);
+    } catch {
+      /* ignore */
+    }
+    clearClipboardTimer = null;
+  }
+  const d = Math.max(300, Math.min(30000, Math.round(Number(delayMs) || 2500)));
+  clearClipboardTimer = setTimeout(() => {
+    clearClipboardTimer = null;
+    try {
+      clipboard.writeText("");
+    } catch {
+      /* ignore */
+    }
+  }, d);
+}
+
 function pasteText(text) {
   if (!text) return;
   const payload = applyPasteSuffix(text);
   const prev = clipboard.readText();
   clipboard.writeText(payload);
   const delay = pasteDelayMsClamped();
+  const privacy = !!cfg?.clearClipboardAfter;
   // Windows: SendKeys Ctrl+V into focused window
   exec(
     `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds ${delay}; [System.Windows.Forms.SendKeys]::SendWait('^v')"`,
     () => {
-      setTimeout(() => clipboard.writeText(prev), 500 + delay);
+      // Default: restore prior clipboard. Privacy: clear instead of restoring secrets.
+      setTimeout(() => {
+        try {
+          clipboard.writeText(privacy ? "" : prev);
+        } catch {
+          /* ignore */
+        }
+      }, 500 + delay);
     }
   );
 }
@@ -2945,6 +2983,11 @@ function deliverText(text) {
   const payload = applyPasteSuffix(t);
   clipboard.writeText(payload);
   notifyDeliver(t, "clipboard");
+  // Clipboard-only: optional timed wipe so transcripts don't linger for Ctrl+V forever.
+  if (cfg?.clearClipboardAfter) {
+    const delay = Math.max(2000, pasteDelayMsClamped() + 2000);
+    scheduleClearClipboard(delay);
+  }
   return { mode: "clipboard", words };
 }
 
@@ -3758,6 +3801,19 @@ function rebuildTrayMenu() {
       click: (item) => setConfigFlag("autoPaste", !!item.checked, "Auto-paste"),
     },
     {
+      label: cfg?.clearClipboardAfter
+        ? "Clear clipboard after paste ✓"
+        : "Clear clipboard after paste",
+      type: "checkbox",
+      checked: !!cfg?.clearClipboardAfter,
+      click: (item) =>
+        setConfigFlag(
+          "clearClipboardAfter",
+          !!item.checked,
+          "Clear clipboard after paste"
+        ),
+    },
+    {
       label: cfg?.soundCues !== false ? "Sound cues ✓" : "Sound cues",
       type: "checkbox",
       checked: cfg?.soundCues !== false,
@@ -4247,6 +4303,7 @@ app.whenReady().then(() => {
       continuousDictation: "Continuous dictation",
       appendDictation: "Append to last",
       autoPaste: "Auto-paste",
+      clearClipboardAfter: "Clear clipboard after paste",
       soundCues: "Sound cues",
       quietNotifications: "Quiet notifications",
     };

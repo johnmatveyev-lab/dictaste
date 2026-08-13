@@ -72,6 +72,7 @@
   <div class="checks">
     <label><input type="checkbox" id="polish" checked /> Polish with Dictaste AI before paste</label>
     <label><input type="checkbox" id="autoPaste" checked /> Auto-paste after dictation (off = copy to clipboard only)</label>
+    <label><input type="checkbox" id="clearClipboardAfter" /> Clear clipboard after paste/copy (privacy)</label>
     <label><input type="checkbox" id="launchAtLogin" /> Launch Dictaste at Windows sign-in</label>
     <label><input type="checkbox" id="quietNotifications" /> Quiet notifications (errors &amp; updates only)</label>
     <label><input type="checkbox" id="persistPauseHotkeys" checked /> Remember pause hotkeys across restarts</label>
@@ -396,6 +397,7 @@
       document.getElementById('api').value = c.apiBase || 'https://dictaste.vercel.app';
       document.getElementById('polish').checked = c.polish !== false;
       document.getElementById('autoPaste').checked = c.autoPaste !== false;
+      document.getElementById('clearClipboardAfter').checked = !!c.clearClipboardAfter;
       document.getElementById('launchAtLogin').checked = !!c.launchAtLogin;
       document.getElementById('quietNotifications').checked = !!c.quietNotifications;
       document.getElementById('persistPauseHotkeys').checked = c.persistPauseHotkeys !== false;
@@ -788,6 +790,7 @@
         apiBase: document.getElementById('api').value.trim() || 'https://dictaste.vercel.app',
         polish: document.getElementById('polish').checked,
         autoPaste: document.getElementById('autoPaste').checked,
+        clearClipboardAfter: document.getElementById('clearClipboardAfter').checked,
         launchAtLogin: document.getElementById('launchAtLogin').checked,
         quietNotifications: document.getElementById('quietNotifications').checked,
         persistPauseHotkeys: document.getElementById('persistPauseHotkeys').checked,

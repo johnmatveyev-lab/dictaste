@@ -482,6 +482,12 @@ if (/localStats|refreshLocalStats|getUsageStats/i.test(settings))
 else fail("settings missing local usage stats");
 if (/getUsageStats|resetUsageStats/.test(preload)) pass("preload local usage stats");
 else fail("preload missing local usage stats");
+if (/clearClipboardAfter|scheduleClearClipboard|Clear clipboard after paste/.test(main))
+  pass("main clear clipboard privacy");
+else fail("main missing clear clipboard privacy");
+if (/id="clearClipboardAfter"|Clear clipboard after paste/i.test(settings))
+  pass("settings clear clipboard privacy");
+else fail("settings missing clear clipboard privacy");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
