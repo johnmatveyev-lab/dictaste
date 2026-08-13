@@ -438,6 +438,12 @@ if (/pinHistoryAt|☆|★ pin|Pin to top/i.test(settings)) pass("settings pin hi
 else fail("settings missing pin history");
 if (/pinHistoryAt/.test(preload)) pass("preload pin history");
 else fail("preload missing pin history");
+if (/moveHistoryAt|boostHistoryAt|Move to top/.test(main)) pass("main reorder/boost history");
+else fail("main missing reorder/boost history");
+if (/moveHistoryAt|boostHistoryAt|⤒/.test(settings)) pass("settings reorder/boost history");
+else fail("settings missing reorder/boost history");
+if (/moveHistoryAt|boostHistoryAt/.test(preload)) pass("preload reorder/boost history");
+else fail("preload missing reorder/boost history");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

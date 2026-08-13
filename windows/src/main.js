@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Reorder history · boost to top · pin move up/down
  * - Pin history items (stay on top · survive clear of recents)
  * - Edit history item · read history aloud (TTS)
  * - History search · copy all history · tray plan/usage · delete item
@@ -1841,6 +1842,111 @@ function pinHistoryAt(index = 0) {
 }
 
 /**
+ * Move a history item within its section (pins among pins, recents among recents).
+ * delta: -1 = toward top of list, +1 = toward bottom.
+ */
+function moveHistoryAt(index = 0, delta = -1) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const d = Number(delta) < 0 ? -1 : 1;
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
+    notify("No history item to move", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const item = items[i];
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (item.pinned) {
+    const pi = pinned.indexOf(item.text);
+    if (pi < 0) return { ok: false, error: "missing" };
+    const nj = pi + d;
+    if (nj < 0 || nj >= pinned.length) {
+      notify(d < 0 ? "Already at top of pins" : "Already at bottom of pins", {
+        force: true,
+      });
+      return { ok: false, error: "edge", index: i };
+    }
+    const next = pinned.slice();
+    const [row] = next.splice(pi, 1);
+    next.splice(nj, 0, row);
+    pinned = next;
+  } else {
+    const hi = hist.indexOf(item.text);
+    if (hi < 0) return { ok: false, error: "missing" };
+    const nj = hi + d;
+    if (nj < 0 || nj >= hist.length) {
+      notify(d < 0 ? "Already at top of recents" : "Already at bottom of recents", {
+        force: true,
+      });
+      return { ok: false, error: "edge", index: i };
+    }
+    const next = hist.slice();
+    const [row] = next.splice(hi, 1);
+    next.splice(nj, 0, row);
+    hist = next;
+  }
+  persistHistoryStores(pinned, hist);
+  const after = flatHistory();
+  const newIndex = after.findIndex((x) => x.text === item.text);
+  notify(d < 0 ? "Moved up" : "Moved down", { force: true });
+  return {
+    ok: true,
+    index: newIndex >= 0 ? newIndex : i,
+    text: item.text,
+    remaining: after.length,
+  };
+}
+
+/**
+ * Boost item to top of its section (first pin, or newest recent).
+ */
+function boostHistoryAt(index = 0) {
+  const i = Math.max(0, Math.floor(Number(index) || 0));
+  const items = flatHistory();
+  if (!items.length || i >= items.length) {
+    notify("No history item to boost", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const item = items[i];
+  let pinned = normalizePinned(cfg?.pinnedHistory);
+  let hist = normalizeHistory(cfg?.history);
+  if (item.pinned) {
+    if (pinned[0] === item.text) {
+      notify("Already top pin", { force: true });
+      return { ok: true, index: 0, text: item.text, remaining: items.length };
+    }
+    pinned = [item.text, ...pinned.filter((x) => x !== item.text)];
+  } else {
+    if (hist[0] === item.text) {
+      notify("Already top of recents", { force: true });
+      return {
+        ok: true,
+        index: pinned.length,
+        text: item.text,
+        remaining: items.length,
+      };
+    }
+    hist = [item.text, ...hist.filter((x) => x !== item.text)].slice(
+      0,
+      historyMaxClamped()
+    );
+    lastTranscript = item.text;
+  }
+  persistHistoryStores(pinned, hist);
+  const after = flatHistory();
+  const newIndex = after.findIndex((x) => x.text === item.text);
+  const preview =
+    item.text.length > 48 ? item.text.slice(0, 45) + "…" : item.text;
+  notify(`Moved to top · ${preview}`, { force: true });
+  return {
+    ok: true,
+    index: newIndex >= 0 ? newIndex : 0,
+    text: item.text,
+    remaining: after.length,
+  };
+}
+
+/**
  * Speak a history entry aloud (same TTS path as highlight-to-speak).
  */
 async function speakHistoryAt(index = 0) {
@@ -3196,6 +3302,18 @@ function rebuildTrayMenu() {
                   click: () => pinHistoryAt(i),
                 },
                 {
+                  label: "Move up",
+                  click: () => moveHistoryAt(i, -1),
+                },
+                {
+                  label: "Move down",
+                  click: () => moveHistoryAt(i, 1),
+                },
+                {
+                  label: "Move to top",
+                  click: () => boostHistoryAt(i),
+                },
+                {
                   label: "Edit in Settings…",
                   click: () => {
                     openSettings();
@@ -3441,6 +3559,12 @@ app.whenReady().then(() => {
   ipcMain.handle("copy-all-history", () => copyAllHistory());
   ipcMain.handle("pin-history-at", (_e, index) =>
     pinHistoryAt(Number(index) || 0)
+  );
+  ipcMain.handle("move-history-at", (_e, index, delta) =>
+    moveHistoryAt(Number(index) || 0, Number(delta) || -1)
+  );
+  ipcMain.handle("boost-history-at", (_e, index) =>
+    boostHistoryAt(Number(index) || 0)
   );
   ipcMain.handle("refresh-plan", async () => {
     const label = await refreshPlanCache({ rebuild: true, force: true });

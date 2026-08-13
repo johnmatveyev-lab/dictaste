@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld("dictaste", {
     ipcRenderer.invoke("update-history-at", index, text),
   speakHistoryAt: (index) => ipcRenderer.invoke("speak-history-at", index),
   pinHistoryAt: (index) => ipcRenderer.invoke("pin-history-at", index),
+  moveHistoryAt: (index, delta) =>
+    ipcRenderer.invoke("move-history-at", index, delta),
+  boostHistoryAt: (index) => ipcRenderer.invoke("boost-history-at", index),
   repolishLast: (index) => ipcRenderer.invoke("repolish-last", index),
   copySupportDiagnostics: () => ipcRenderer.invoke("copy-support-diagnostics"),
   getHotkeysPaused: () => ipcRenderer.invoke("get-hotkeys-paused"),

@@ -202,7 +202,7 @@
   <label>History size <span id="historyMaxVal" style="color:var(--lime)">25</span> (10–50 · tray paste/copy each)</label>
   <input id="historyMax" type="range" min="10" max="50" step="5" value="25" style="width:100%;accent-color:var(--lime);" />
 
-  <label>Recent transcripts (pins on top · click = paste · Shift = copy · Alt = read · filter below)</label>
+  <label>Recent transcripts (pins on top · ↑↓ reorder · ⤒ top · click = paste · filter below)</label>
   <input id="historyFilter" placeholder="Filter history…" autocomplete="off" spellcheck="false" style="width:100%;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:10px 12px;font:inherit;" />
   <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
     Dictate once to build history. Click paste · Shift copy · Alt read · ★ pin · ✎ edit · ✕ delete.
@@ -580,6 +580,45 @@
             : (r?.error || 'Pin failed');
           await renderHistory();
         };
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'ghost';
+        upBtn.style.cssText = 'flex-shrink:0;padding:6px 8px;font-size:0.75rem;';
+        upBtn.textContent = '↑';
+        upBtn.title = 'Move up';
+        upBtn.onclick = async () => {
+          const r = await window.dictaste.moveHistoryAt(i, -1);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Moved up · now #' + ((r.index != null ? r.index : i) + 1))
+            : (r?.error === 'edge' ? 'Already at edge' : (r?.error || 'Move failed'));
+          await renderHistory();
+        };
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'ghost';
+        downBtn.style.cssText = 'flex-shrink:0;padding:6px 8px;font-size:0.75rem;';
+        downBtn.textContent = '↓';
+        downBtn.title = 'Move down';
+        downBtn.onclick = async () => {
+          const r = await window.dictaste.moveHistoryAt(i, 1);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Moved down · now #' + ((r.index != null ? r.index : i) + 1))
+            : (r?.error === 'edge' ? 'Already at edge' : (r?.error || 'Move failed'));
+          await renderHistory();
+        };
+        const topBtn = document.createElement('button');
+        topBtn.type = 'button';
+        topBtn.className = 'ghost';
+        topBtn.style.cssText = 'flex-shrink:0;padding:6px 8px;font-size:0.7rem;';
+        topBtn.textContent = '⤒';
+        topBtn.title = 'Move to top of pins/recents';
+        topBtn.onclick = async () => {
+          const r = await window.dictaste.boostHistoryAt(i);
+          document.getElementById('status').textContent = r?.ok
+            ? ('Top · #' + ((r.index != null ? r.index : 0) + 1))
+            : (r?.error || 'Boost failed');
+          await renderHistory();
+        };
         const speakBtn = document.createElement('button');
         speakBtn.type = 'button';
         speakBtn.className = 'ghost';
@@ -616,6 +655,9 @@
         };
         wrap.appendChild(row);
         wrap.appendChild(pinBtn);
+        wrap.appendChild(upBtn);
+        wrap.appendChild(downBtn);
+        wrap.appendChild(topBtn);
         wrap.appendChild(speakBtn);
         wrap.appendChild(editBtn);
         wrap.appendChild(del);
