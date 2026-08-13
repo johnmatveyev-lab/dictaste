@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   testVoice: () => ipcRenderer.invoke("test-voice"),
   testNvidiaKey: () => ipcRenderer.invoke("test-nvidia-key"),
   testOpenAIKey: () => ipcRenderer.invoke("test-openai-key"),
+  getUsageStats: () => ipcRenderer.invoke("get-usage-stats"),
+  resetUsageStats: () => ipcRenderer.invoke("reset-usage-stats"),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

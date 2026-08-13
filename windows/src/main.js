@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Local session stats (words + dictations today)
  * - Test NVIDIA / OpenAI BYO key connection
  * - Merge history with next · duplicate history item
  * - BYO NVIDIA NIM polish + Magpie TTS (nvapi key)
@@ -237,6 +238,11 @@ function defaultConfig() {
      * One phrase per entry; max 20. Not pushed into dictation history unless pasted via dictation.
      */
     snippets: [],
+    /**
+     * Local-only daily stats (not sent to server).
+     * { day: "YYYY-MM-DD", words: number, dictations: number }
+     */
+    usageStats: { day: "", words: 0, dictations: 0 },
   };
 }
 
@@ -1870,6 +1876,7 @@ function pushHistory(text) {
   const t = String(text || "").trim();
   if (!t) return;
   lastTranscript = t;
+  bumpUsageStats(t, { persist: false });
   const pinned = normalizePinned(cfg?.pinnedHistory);
   // Keep pin if already pinned; still set as last transcript
   if (pinned.includes(t)) {
@@ -1884,6 +1891,7 @@ function pushHistory(text) {
   const max = historyMaxClamped();
   const prev = normalizeHistory(cfg?.history);
   const next = [t, ...prev.filter((x) => x !== t)].slice(0, max);
+  // persistHistoryStores also saves usageStats via cfg
   persistHistoryStores(pinned, next);
 }
 
@@ -2544,6 +2552,7 @@ function copySupportDiagnostics() {
     `Hotkeys paused: ${hotkeysPaused ? "yes" : "no"}`,
     `Auto-paste: ${cfg?.autoPaste !== false ? "on" : "off"} · continuous: ${cfg?.continuousDictation ? "on" : "off"} · append: ${cfg?.appendDictation ? "on" : "off"} · quiet: ${cfg?.quietNotifications ? "on" : "off"} · compact HUD: ${cfg?.hudCompact ? "on" : "off"}`,
     `History: ${flatTexts().length} (${normalizePinned(cfg?.pinnedHistory).length}★ / ${historyMaxClamped()} recents)`,
+    `Local stats: ${usageStatsLabel()} (${getUsageStats().day})`,
     `Launch at login: ${cfg?.launchAtLogin ? "on" : "off"}`,
     `Site: https://dictaste.vercel.app · Issues: https://github.com/johnmatveyev-lab/dictaste/issues`,
   ];
@@ -2830,6 +2839,64 @@ function countWords(text) {
   if (!t) return 0;
   // Unicode-aware-ish: split on whitespace / punctuation runs
   return t.split(/[\s\u00A0]+/).filter(Boolean).length;
+}
+
+function todayIsoDay() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Local-only daily usage; rolls over at UTC day boundary. */
+function getUsageStats() {
+  const day = todayIsoDay();
+  const raw = cfg?.usageStats && typeof cfg.usageStats === "object" ? cfg.usageStats : {};
+  if (String(raw.day || "") !== day) {
+    return { day, words: 0, dictations: 0 };
+  }
+  return {
+    day,
+    words: Math.max(0, Math.floor(Number(raw.words) || 0)),
+    dictations: Math.max(0, Math.floor(Number(raw.dictations) || 0)),
+  };
+}
+
+function bumpUsageStats(text, { persist = true } = {}) {
+  const words = countWords(text);
+  if (words <= 0) return getUsageStats();
+  const cur = getUsageStats();
+  const next = {
+    day: cur.day,
+    words: cur.words + words,
+    dictations: cur.dictations + 1,
+  };
+  cfg = { ...cfg, usageStats: next };
+  if (persist) {
+    try {
+      saveConfig(cfg);
+    } catch {
+      /* ignore */
+    }
+  }
+  return next;
+}
+
+function resetUsageStats() {
+  const next = { day: todayIsoDay(), words: 0, dictations: 0 };
+  cfg = { ...cfg, usageStats: next };
+  try {
+    saveConfig(cfg);
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  notify("Today's local stats reset", { force: true });
+  return { ok: true, ...next };
+}
+
+function usageStatsLabel() {
+  const s = getUsageStats();
+  const w = s.words;
+  const d = s.dictations;
+  return `Today · ${w} word${w === 1 ? "" : "s"} · ${d} dictation${d === 1 ? "" : "s"}`;
 }
 
 /**
@@ -3456,6 +3523,7 @@ function rebuildTrayMenu() {
       }
     }).catch(() => {});
   }
+  const stats = getUsageStats();
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
     {
@@ -3467,6 +3535,10 @@ function rebuildTrayMenu() {
       enabled: false,
     },
     {
+      label: usageStatsLabel(),
+      enabled: false,
+    },
+    {
       label: "Refresh plan / usage",
       click: () => {
         refreshPlanCache({ rebuild: true, force: true })
@@ -3475,6 +3547,11 @@ function rebuildTrayMenu() {
           )
           .catch(() => {});
       },
+    },
+    {
+      label: "Reset today's local stats",
+      enabled: stats.words > 0 || stats.dictations > 0,
+      click: () => resetUsageStats(),
     },
     {
       label: hotkeysPaused
@@ -4107,6 +4184,8 @@ app.whenReady().then(() => {
   ipcMain.handle("test-voice", async () => testVoice());
   ipcMain.handle("test-nvidia-key", async () => testNvidiaKey());
   ipcMain.handle("test-openai-key", async () => testOpenAIKey());
+  ipcMain.handle("get-usage-stats", () => getUsageStats());
+  ipcMain.handle("reset-usage-stats", () => resetUsageStats());
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
       Number(index) || 0,

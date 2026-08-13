@@ -40,6 +40,9 @@
   <label>License key (from dictaste.vercel.app/dashboard)</label>
   <input id="license" placeholder="Paste your license key" autocomplete="off" spellcheck="false" />
 
+  <div id="localStats" class="hint" style="margin-top:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);">
+    Local today: — · <button type="button" id="resetLocalStats" class="ghost" style="display:inline;padding:2px 8px;font-size:0.75rem;">Reset</button>
+  </div>
   <div id="usage" class="hint" style="margin-top:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);">
     Save a license key, then <strong style="color:var(--lime)">Refresh plan</strong> to see usage.
   </div>
@@ -342,6 +345,41 @@
       el.innerHTML = lines.join('<br/>');
     }
 
+    async function refreshLocalStats() {
+      const el = document.getElementById('localStats');
+      if (!el || !window.dictaste.getUsageStats) return;
+      try {
+        const s = await window.dictaste.getUsageStats();
+        const w = s?.words || 0;
+        const d = s?.dictations || 0;
+        const day = s?.day || '';
+        el.innerHTML =
+          'Local today' +
+          (day ? ' (' + day + ')' : '') +
+          ': <strong style="color:var(--lime)">' +
+          w +
+          '</strong> word' +
+          (w === 1 ? '' : 's') +
+          ' · <strong style="color:var(--lime)">' +
+          d +
+          '</strong> dictation' +
+          (d === 1 ? '' : 's') +
+          ' · <button type="button" id="resetLocalStats" class="ghost" style="display:inline;padding:2px 8px;font-size:0.75rem;">Reset</button>';
+        const btn = document.getElementById('resetLocalStats');
+        if (btn) {
+          btn.onclick = async () => {
+            const r = await window.dictaste.resetUsageStats();
+            document.getElementById('status').textContent = r?.ok
+              ? "Today's local stats reset"
+              : (r?.error || 'Reset failed');
+            await refreshLocalStats();
+          };
+        }
+      } catch {
+        el.textContent = 'Local today: —';
+      }
+    }
+
     async function refreshPlan() {
       document.getElementById('status').textContent = 'Checking license…';
       const st = await window.dictaste.licenseStatus();
@@ -474,9 +512,11 @@
           document.getElementById('status').textContent = 'Done';
           document.getElementById('text').value = s.last;
           renderHistory().catch(() => {});
+          refreshLocalStats().catch(() => {});
         } else document.getElementById('status').textContent = 'Ready';
       });
       if (c.licenseKey) refreshPlan().catch(() => {});
+      await refreshLocalStats();
       await refreshPauseBanner();
     }
 

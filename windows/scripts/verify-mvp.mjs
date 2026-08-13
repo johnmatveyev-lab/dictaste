@@ -474,6 +474,14 @@ if (/id="testNvidia"|id="testOpenAI"|Test NVIDIA key/i.test(settings))
 else fail("settings missing test BYO keys");
 if (/testNvidiaKey|testOpenAIKey/.test(preload)) pass("preload test BYO keys");
 else fail("preload missing test BYO keys");
+if (/getUsageStats|bumpUsageStats|usageStatsLabel|Today ·/.test(main))
+  pass("main local usage stats");
+else fail("main missing local usage stats");
+if (/localStats|refreshLocalStats|getUsageStats/i.test(settings))
+  pass("settings local usage stats");
+else fail("settings missing local usage stats");
+if (/getUsageStats|resetUsageStats/.test(preload)) pass("preload local usage stats");
+else fail("preload missing local usage stats");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
