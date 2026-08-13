@@ -552,6 +552,14 @@ if (/id="jsonPretty"|jsonFormatLast|JSON last/i.test(settings))
 else fail("settings missing JSON last");
 if (/jsonFormatLast|jsonFormatPreview/.test(preload)) pass("preload JSON last");
 else fail("preload missing JSON last");
+if (/hashLast|hashText|Hash last/.test(main))
+  pass("main hash last");
+else fail("main missing hash last");
+if (/id="hashSha256"|hashLast|Hash last/i.test(settings))
+  pass("settings hash last");
+else fail("settings missing hash last");
+if (/hashLast|hashPreview/.test(preload)) pass("preload hash last");
+else fail("preload missing hash last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

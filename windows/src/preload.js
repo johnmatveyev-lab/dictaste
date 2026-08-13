@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   encodePreview: (kind) => ipcRenderer.invoke("encode-preview", kind),
   jsonFormatLast: (kind) => ipcRenderer.invoke("json-format-last", kind),
   jsonFormatPreview: (kind) => ipcRenderer.invoke("json-format-preview", kind),
+  hashLast: (kind) => ipcRenderer.invoke("hash-last", kind),
+  hashPreview: (kind) => ipcRenderer.invoke("hash-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

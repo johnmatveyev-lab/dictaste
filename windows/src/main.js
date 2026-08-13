@@ -3666,6 +3666,83 @@ function jsonFormatLast(kind = "pretty") {
   };
 }
 
+/**
+ * Cryptographic digests of last transcript (utf-8).
+ * @param {"sha256"|"sha1"|"md5"|"sha256-upper"|"sha256-lines"|"sha256-labeled"} kind
+ */
+function hashText(raw, kind = "sha256") {
+  const crypto = require("crypto");
+  const t = String(raw || "");
+  if (!t) return "";
+  const digest = (algo, data, upper = false) => {
+    const hex = crypto.createHash(algo).update(data, "utf8").digest("hex");
+    return upper ? hex.toUpperCase() : hex;
+  };
+  switch (String(kind || "sha256")) {
+    case "sha1":
+      return digest("sha1", t);
+    case "md5":
+      return digest("md5", t);
+    case "sha256-upper":
+      return digest("sha256", t, true);
+    case "sha256-lines": {
+      return t
+        .replace(/\r\n/g, "\n")
+        .split("\n")
+        .map((line) => {
+          if (!line.trim()) return line;
+          return digest("sha256", line);
+        })
+        .join("\n");
+    }
+    case "sha256-labeled":
+      return "sha256:" + digest("sha256", t);
+    case "sha256":
+    default:
+      return digest("sha256", t);
+  }
+}
+
+/**
+ * Hash last transcript and paste. Updates lastTranscript + history[0] when matched.
+ */
+function hashLast(kind = "sha256") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to hash", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = hashText(src, kind);
+  if (!text) {
+    notify("Hash produced empty text", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 const TEST_VOICE_SAMPLES = {
   "en-US": "Dictaste is ready. Speak it. Ship it.",
   "en-GB": "Dictaste is ready. Speak it. Ship it.",
@@ -4888,6 +4965,18 @@ function rebuildTrayMenu() {
         { label: "Validate + pretty", click: () => jsonFormatLast("validate") },
       ],
     },
+    {
+      label: "Hash last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "SHA-256", click: () => hashLast("sha256") },
+        { label: "SHA-256 upper", click: () => hashLast("sha256-upper") },
+        { label: "SHA-256 labeled", click: () => hashLast("sha256-labeled") },
+        { label: "SHA-256 per line", click: () => hashLast("sha256-lines") },
+        { label: "SHA-1", click: () => hashLast("sha1") },
+        { label: "MD5", click: () => hashLast("md5") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5156,6 +5245,17 @@ app.whenReady().then(() => {
         detail: String(e && e.message ? e.message : e),
       };
     }
+  });
+  ipcMain.handle("hash-last", (_e, kind) => hashLast(String(kind || "sha256")));
+  ipcMain.handle("hash-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "sha256"),
+      text: hashText(src, kind),
+      source: src,
+    };
   });
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
