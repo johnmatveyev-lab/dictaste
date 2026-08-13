@@ -1,5 +1,6 @@
 /**
  * Dictaste Windows MVP
+ * - Test NVIDIA / OpenAI BYO key connection
  * - Merge history with next · duplicate history item
  * - BYO NVIDIA NIM polish + Magpie TTS (nvapi key)
  * - Snippets — quick paste phrases from tray + Settings
@@ -2918,6 +2919,71 @@ async function testVoice() {
 }
 
 /**
+ * Ping NVIDIA NIM with a tiny polish request (does not paste / alter history).
+ */
+async function testNvidiaKey() {
+  const key = (cfg?.nvidiaKey || "").trim();
+  if (!key) {
+    notify("Add an NVIDIA API key in Settings first", { force: true });
+    return { ok: false, error: "no_key" };
+  }
+  notify("Testing NVIDIA NIM…", { force: true });
+  const t0 = Date.now();
+  try {
+    const polished = await polishTextByoNVIDIA(
+      "hello world this is a dictaste connection test"
+    );
+    const ms = Date.now() - t0;
+    if (!polished) {
+      notify("NVIDIA NIM failed — check key / model / network", { force: true });
+      return { ok: false, error: "no_response", ms };
+    }
+    const preview =
+      polished.length > 80 ? polished.slice(0, 77) + "…" : polished;
+    notify(`NVIDIA OK · ${ms}ms · ${preview}`, { force: true });
+    return {
+      ok: true,
+      ms,
+      model: cfg?.nvidiaPolishModel || "nvidia/nemotron-mini-4b-instruct",
+      sample: polished,
+    };
+  } catch (e) {
+    notify(`NVIDIA test failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
+ * Ping OpenAI chat with a tiny polish request (does not paste / alter history).
+ */
+async function testOpenAIKey() {
+  const key = (cfg?.openAIKey || "").trim();
+  if (!key) {
+    notify("Add an OpenAI API key in Settings first", { force: true });
+    return { ok: false, error: "no_key" };
+  }
+  notify("Testing OpenAI…", { force: true });
+  const t0 = Date.now();
+  try {
+    const polished = await polishTextByoOpenAI(
+      "hello world this is a dictaste connection test"
+    );
+    const ms = Date.now() - t0;
+    if (!polished) {
+      notify("OpenAI failed — check key / network / billing", { force: true });
+      return { ok: false, error: "no_response", ms };
+    }
+    const preview =
+      polished.length > 80 ? polished.slice(0, 77) + "…" : polished;
+    notify(`OpenAI OK · ${ms}ms · ${preview}`, { force: true });
+    return { ok: true, ms, model: "gpt-4o-mini", sample: polished };
+  } catch (e) {
+    notify(`OpenAI test failed: ${e.message || e}`, { force: true });
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+/**
  * @param {string} body
  * @param {{ force?: boolean }} [opts] force=true bypasses quietNotifications
  */
@@ -3517,6 +3583,20 @@ function rebuildTrayMenu() {
       },
     },
     {
+      label: "Test NVIDIA key",
+      enabled: !!(cfg?.nvidiaKey || "").trim(),
+      click: () => {
+        testNvidiaKey().catch(() => {});
+      },
+    },
+    {
+      label: "Test OpenAI key",
+      enabled: !!(cfg?.openAIKey || "").trim(),
+      click: () => {
+        testOpenAIKey().catch(() => {});
+      },
+    },
+    {
       label: `Language · ${STT_LANG_LABELS[cfg?.sttLang] || cfg?.sttLang || "en-US"}`,
       submenu: Object.keys(STT_LANG_LABELS).map((code) => ({
         label: STT_LANG_LABELS[code],
@@ -4025,6 +4105,8 @@ app.whenReady().then(() => {
   ipcMain.handle("check-for-updates", async () => checkForUpdates());
   ipcMain.handle("list-sapi-voices", async () => listSapiVoices());
   ipcMain.handle("test-voice", async () => testVoice());
+  ipcMain.handle("test-nvidia-key", async () => testNvidiaKey());
+  ipcMain.handle("test-openai-key", async () => testOpenAIKey());
   ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
       Number(index) || 0,

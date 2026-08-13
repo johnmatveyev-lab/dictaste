@@ -1,8 +1,8 @@
 # Install Dictaste on Windows
 
-## Preview zip (0.1.46 · merge/duplicate + NVIDIA NIM + edit + read aloud + tray plan/usage)
+## Preview zip (0.1.47 · test BYO keys + merge/NVIDIA + edit + read aloud + tray plan/usage)
 
-1. Download [Dictaste-Setup-0.1.46.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.46.zip) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
+1. Download [Dictaste-Setup-0.1.47.zip](https://github.com/johnmatveyev-lab/dictaste/releases/download/v0.1.4/Dictaste-Setup-0.1.47.zip) or [dictaste.vercel.app/download](https://dictaste.vercel.app/download).
 2. Unzip → run **Dictaste.exe** (SmartScreen may warn — **More info → Run anyway**). Signing plan: [WINDOWS-TRUSTED-SIGNING.md](./WINDOWS-TRUSTED-SIGNING.md).
 3. Tray → **Settings…** → paste license.
 4. Hotkeys (remappable): **Ctrl+Shift+Space** dictate · **Ctrl+Shift+R** read · **Ctrl+Shift+P** polish selection.

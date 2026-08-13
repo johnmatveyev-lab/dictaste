@@ -466,6 +466,14 @@ else fail("settings missing merge/duplicate history");
 if (/mergeHistoryWithNext|duplicateHistoryAt|mergeLastTwoHistory/.test(preload))
   pass("preload merge/duplicate history");
 else fail("preload missing merge/duplicate history");
+if (/testNvidiaKey|testOpenAIKey|Test NVIDIA key/.test(main))
+  pass("main test BYO keys");
+else fail("main missing test BYO keys");
+if (/id="testNvidia"|id="testOpenAI"|Test NVIDIA key/i.test(settings))
+  pass("settings test BYO keys");
+else fail("settings missing test BYO keys");
+if (/testNvidiaKey|testOpenAIKey/.test(preload)) pass("preload test BYO keys");
+else fail("preload missing test BYO keys");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

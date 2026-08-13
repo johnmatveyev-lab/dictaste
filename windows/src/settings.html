@@ -213,9 +213,15 @@
     <option value="English-US.Female-Neutral">English-US.Female-Neutral</option>
     <option value="English-US.Male-Neutral">English-US.Male-Neutral</option>
   </select>
+  <div class="row" style="margin-top:6px">
+    <button type="button" id="testNvidia" class="ghost">Test NVIDIA key</button>
+  </div>
 
   <label>OpenAI API key (Whisper STT + BYO premium TTS + polish)</label>
   <input id="openai" type="password" placeholder="sk-… (optional second provider)" autocomplete="off" spellcheck="false" />
+  <div class="row" style="margin-top:6px">
+    <button type="button" id="testOpenAI" class="ghost">Test OpenAI key</button>
+  </div>
 
   <label>whisper-cli binary path (offline)</label>
   <input id="whisperBin" placeholder="C:\tools\whisper-cli.exe" />
@@ -975,6 +981,28 @@
       } else {
         document.getElementById('status').textContent = r?.error || 'Reset failed';
       }
+    };
+    document.getElementById('testNvidia').onclick = async () => {
+      await save();
+      document.getElementById('status').textContent = 'Testing NVIDIA NIM…';
+      const r = await window.dictaste.testNvidiaKey();
+      document.getElementById('status').textContent = r?.ok
+        ? ('NVIDIA OK · ' + (r.ms != null ? r.ms + 'ms · ' : '') + (r.sample || r.model || 'connected'))
+        : (r?.error === 'no_key'
+          ? 'Add NVIDIA key first'
+          : (r?.error || 'NVIDIA test failed'));
+      if (r?.sample) document.getElementById('text').value = r.sample;
+    };
+    document.getElementById('testOpenAI').onclick = async () => {
+      await save();
+      document.getElementById('status').textContent = 'Testing OpenAI…';
+      const r = await window.dictaste.testOpenAIKey();
+      document.getElementById('status').textContent = r?.ok
+        ? ('OpenAI OK · ' + (r.ms != null ? r.ms + 'ms · ' : '') + (r.sample || r.model || 'connected'))
+        : (r?.error === 'no_key'
+          ? 'Add OpenAI key first'
+          : (r?.error || 'OpenAI test failed'));
+      if (r?.sample) document.getElementById('text').value = r.sample;
     };
     document.getElementById('testVoice').onclick = async () => {
       await save();
