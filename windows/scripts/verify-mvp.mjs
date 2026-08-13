@@ -416,6 +416,12 @@ if (/undoLastDictation|Undo last dictation/.test(main)) pass("main undo last");
 else fail("main missing undo last");
 if (/deleteHistoryAt|Delete from history/.test(main)) pass("main delete history item");
 else fail("main missing delete history item");
+if (/copyAllHistory|Copy all history/.test(main)) pass("main copy all history");
+else fail("main missing copy all history");
+if (/refreshPlanCache|cachedPlanLabel|Refresh plan/.test(main)) pass("main tray plan usage");
+else fail("main missing tray plan usage");
+if (/historyFilter|Filter history/i.test(settings)) pass("settings history filter");
+else fail("settings missing history filter");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

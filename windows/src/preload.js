@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   setConfigFlag: (key, on) => ipcRenderer.invoke("set-config-flag", key, on),
   setAppendJoiner: (mode) => ipcRenderer.invoke("set-append-joiner", mode),
   getHistory: () => ipcRenderer.invoke("get-history"),
+  copyAllHistory: () => ipcRenderer.invoke("copy-all-history"),
+  refreshPlan: () => ipcRenderer.invoke("refresh-plan"),
   exportHistory: () => ipcRenderer.invoke("export-history"),
   importHistory: () => ipcRenderer.invoke("import-history"),
   openUserData: () => ipcRenderer.invoke("open-user-data"),

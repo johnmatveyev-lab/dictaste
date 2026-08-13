@@ -1,6 +1,6 @@
 /**
  * Dictaste Windows MVP
- * - Delete history item · undo last · append joiner · HUD modes
+ * - History search · copy all history · tray plan/usage · delete item
  * - Sticky HUD position · tray TTS rate presets
  * - Re-polish last · copy support diagnostics
  * - Live HUD word count · skip short highlight-to-speak under N words
@@ -599,6 +599,10 @@ let speakProc = null;
 let cfg = null;
 /** Last polished dictation (tray Copy last transcript) */
 let lastTranscript = "";
+/** Cached license/plan label for tray (refreshed async) */
+let cachedPlanLabel = "";
+let planRefreshInFlight = false;
+let lastPlanRefreshAt = 0;
 /** Last highlight-to-speak text (re-read without re-capturing selection) */
 let lastReadText = "";
 /** Runtime: global hotkeys unbound until resumed (optionally persisted) */
@@ -1669,7 +1673,63 @@ function deleteHistoryAt(index = 0) {
   return { ok: true, removed: preview, remaining: next.length };
 }
 
+function copyAllHistory() {
+  const hist = normalizeHistory(cfg?.history);
+  if (!hist.length) {
+    notify("No history to copy", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = hist
+    .map((s, i) => `${i + 1}. ${s}`)
+    .join("\n\n");
+  clipboard.writeText(text);
+  notify(`Copied ${hist.length} transcript${hist.length === 1 ? "" : "s"}`, {
+    force: true,
+  });
+  return { ok: true, count: hist.length };
+}
+
+async function refreshPlanCache({ rebuild = true, force = false } = {}) {
+  if (planRefreshInFlight) return cachedPlanLabel;
+  const now = Date.now();
+  if (!force && cachedPlanLabel && now - lastPlanRefreshAt < 60_000) {
+    return cachedPlanLabel;
+  }
+  planRefreshInFlight = true;
+  try {
+    const st = await fetchLicenseStatus();
+    if (st?.ok) {
+      const plan = st.planName || st.plan || "free";
+      if (st.unlimited) {
+        cachedPlanLabel = `${plan} · unlimited`;
+      } else if (st.wordsLimit != null) {
+        cachedPlanLabel = `${plan} · polish ${st.wordsUsed ?? 0}/${st.wordsLimit}`;
+      } else {
+        cachedPlanLabel = String(plan);
+      }
+    } else if (!cfg?.licenseKey) {
+      cachedPlanLabel = "no license";
+    } else {
+      cachedPlanLabel = st?.error || "license error";
+    }
+  } catch (e) {
+    cachedPlanLabel = String(e.message || e);
+  } finally {
+    planRefreshInFlight = false;
+    lastPlanRefreshAt = Date.now();
+  }
+  if (rebuild) {
+    try {
+      rebuildTrayMenu();
+    } catch {
+      /* ignore */
+    }
+  }
+  return cachedPlanLabel;
+}
+
 function copyLastTranscript(index = 0) {
+
   const hist = normalizeHistory(cfg?.history);
   const t = String(
     hist[index] || (index === 0 ? lastTranscript : "") || ""
@@ -2613,8 +2673,39 @@ function rebuildTrayMenu() {
   const d = toDisplayHotkey(hotkeyDictateAccel());
   const r = toDisplayHotkey(hotkeyReadAccel());
   const p = toDisplayHotkey(hotkeyPolishAccel());
+  // Kick a background plan refresh at most once per minute (non-blocking)
+  if (cfg?.licenseKey && !planRefreshInFlight && Date.now() - lastPlanRefreshAt > 60_000) {
+    const prev = cachedPlanLabel;
+    refreshPlanCache({ rebuild: false, force: true }).then((label) => {
+      if (label && label !== prev) {
+        try {
+          if (tray) rebuildTrayMenu();
+        } catch {
+          /* ignore */
+        }
+      }
+    }).catch(() => {});
+  }
   const menu = Menu.buildFromTemplate([
     { label: `Dictaste ${appVersion()}`, enabled: false },
+    {
+      label: cachedPlanLabel
+        ? `Plan · ${cachedPlanLabel}`
+        : cfg?.licenseKey
+          ? "Plan · checking…"
+          : "Plan · no license",
+      enabled: false,
+    },
+    {
+      label: "Refresh plan / usage",
+      click: () => {
+        refreshPlanCache({ rebuild: true, force: true })
+          .then((label) =>
+            notify(label ? `Plan · ${label}` : "Plan refreshed", { force: true })
+          )
+          .catch(() => {});
+      },
+    },
     {
       label: hotkeysPaused
         ? pauseResumeAt > Date.now()
@@ -2928,6 +3019,10 @@ function rebuildTrayMenu() {
             click: () => pasteLastTranscript(0),
           },
           {
+            label: "Copy all history",
+            click: () => copyAllHistory(),
+          },
+          {
             label: "Export history…",
             click: () => exportHistory(),
           },
@@ -3017,6 +3112,10 @@ app.whenReady().then(() => {
   }
   createTray();
   ensureHud();
+  // Warm plan/usage for tray (non-blocking)
+  setTimeout(() => {
+    refreshPlanCache({ rebuild: true, force: true }).catch(() => {});
+  }, 2500);
   if (hotkeysPaused) {
     try {
       globalShortcut.unregisterAll();
@@ -3115,6 +3214,11 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("cancel-dictation", () => cancelDictation());
   ipcMain.handle("get-history", () => normalizeHistory(cfg?.history));
+  ipcMain.handle("copy-all-history", () => copyAllHistory());
+  ipcMain.handle("refresh-plan", async () => {
+    const label = await refreshPlanCache({ rebuild: true, force: true });
+    return { ok: true, label: cachedPlanLabel, planLabel: label };
+  });
   ipcMain.handle("export-history", () => exportHistory());
   ipcMain.handle("import-history", async () => importHistory());
   ipcMain.handle("open-user-data", () => openUserDataFolder());

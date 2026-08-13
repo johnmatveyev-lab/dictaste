@@ -28,10 +28,10 @@
   </style>
 </head>
 <body>
-  <div class="tag">Dictaste · Windows MVP 0.1.39</div>
+  <div class="tag">Dictaste · Windows MVP 0.1.40</div>
   <h1>Speak it. Ship it.</h1>
   <p class="hint">
-    Dictate · highlight-to-speak · polish selection. Delete history item · undo last · append joiner.
+    Dictate · highlight-to-speak · polish selection. History search · copy all · tray plan/usage.
     Word-count toast · import history · smart quotes. Portable zip is unsigned — SmartScreen may warn.
   </p>
   <div id="hotkeyBanner" class="hint" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(255,45,149,0.45);border-radius:10px;background:rgba(255,45,149,0.08);color:#ff8fab;"></div>
@@ -202,7 +202,8 @@
   <label>History size <span id="historyMaxVal" style="color:var(--lime)">25</span> (10–50 · tray paste/copy each)</label>
   <input id="historyMax" type="range" min="10" max="50" step="5" value="25" style="width:100%;accent-color:var(--lime);" />
 
-  <label>Recent transcripts (click = paste · Shift-click = copy)</label>
+  <label>Recent transcripts (click = paste · Shift-click = copy · filter below)</label>
+  <input id="historyFilter" placeholder="Filter history…" autocomplete="off" spellcheck="false" style="width:100%;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:10px 12px;font:inherit;" />
   <div id="history" class="hint" style="margin-top:6px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-height:2.5em;">
     Dictate once to build history. Click to paste · Shift+click copy · ✕ deletes.
   </div>
@@ -210,6 +211,7 @@
     <button type="button" id="refreshHistory" class="ghost">Refresh history</button>
     <button type="button" id="exportHistory" class="ghost">Export history…</button>
     <button type="button" id="importHistory" class="ghost">Import history…</button>
+    <button type="button" id="copyAllHistory" class="ghost">Copy all history</button>
     <button type="button" id="clearHistory" class="ghost">Clear history</button>
   </div>
 
@@ -447,12 +449,21 @@
       } catch {
         hist = [];
       }
+      const q = (document.getElementById('historyFilter')?.value || '').trim().toLowerCase();
+      const indexed = hist.map((t, i) => ({ t, i }));
+      const shown = q
+        ? indexed.filter(({ t }) => String(t).toLowerCase().includes(q))
+        : indexed;
       if (!hist.length) {
         el.textContent = 'Dictate once to build history. Click to paste · Shift+click copy · ✕ deletes.';
         return;
       }
+      if (!shown.length) {
+        el.textContent = 'No transcripts match filter.';
+        return;
+      }
       el.innerHTML = '';
-      hist.forEach((t, i) => {
+      shown.forEach(({ t, i }) => {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;margin:0 0 6px;';
         const row = document.createElement('button');
@@ -699,6 +710,15 @@
         ? 'Voice test done · ' + (r.lang || '')
         : (r?.error || 'Voice test failed');
     };
+    document.getElementById('historyFilter').oninput = () => {
+      renderHistory().catch(() => {});
+    };
+    document.getElementById('copyAllHistory').onclick = async () => {
+      const r = await window.dictaste.copyAllHistory();
+      document.getElementById('status').textContent = r?.ok
+        ? ('Copied ' + (r.count || 0) + ' transcripts')
+        : (r?.error === 'empty' ? 'History empty' : (r?.error || 'Copy failed'));
+    };
     document.getElementById('refreshHistory').onclick = async () => {
       await renderHistory();
       document.getElementById('status').textContent = 'History refreshed';
@@ -728,6 +748,10 @@
     document.getElementById('save').onclick = save;
     document.getElementById('refreshPlan').onclick = async () => {
       await save();
+      if (window.dictaste.refreshPlan) {
+        const r = await window.dictaste.refreshPlan();
+        document.getElementById('status').textContent = r?.planLabel || r?.label || 'Plan refreshed';
+      }
       await refreshPlan();
     };
     document.getElementById('checkUpdates').onclick = async () => {
