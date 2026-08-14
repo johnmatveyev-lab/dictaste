@@ -749,6 +749,15 @@ else fail("settings missing table last");
 if (/tableLast|tablePreview/.test(preload))
   pass("preload table last");
 else fail("preload missing table last");
+if (/caseLast|caseText|Case last/.test(main))
+  pass("main case last");
+else fail("main missing case last");
+if (/id="csSnake"|caseLast|Case last/i.test(settings))
+  pass("settings case last");
+else fail("settings missing case last");
+if (/caseLast|casePreview/.test(preload))
+  pass("preload case last");
+else fail("preload missing case last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

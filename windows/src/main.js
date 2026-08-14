@@ -52,6 +52,7 @@
  * - Markdown last (strip · bold/italic · code · headers · links)
  * - Unique last (dedupe lines · case-insensitive · words · counts)
  * - Table last (md/csv/tsv · align · transpose · key:value pairs)
+ * - Case last (snake · camel · pascal · kebab · CONST · words)
  */
 const {
   app,
@@ -6402,7 +6403,111 @@ function tableLast(kind = "md") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+function splitIdentWords(s) {
+  return String(s || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+}
+
+function joinIdentWords(words, kind) {
+  const lower = words.map((w) => w.toLowerCase());
+  if (!lower.length) return "";
+  switch (String(kind || "snake")) {
+    case "camel":
+      return lower
+        .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+        .join("");
+    case "pascal":
+      return lower.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+    case "kebab":
+      return lower.join("-");
+    case "const":
+      return lower.map((w) => w.toUpperCase()).join("_");
+    case "dot":
+      return lower.join(".");
+    case "path":
+      return lower.join("/");
+    case "words":
+      return lower.join(" ");
+    case "title":
+      return lower.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    case "train":
+      return lower.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("-");
+    case "snake":
+    default:
+      return lower.join("_");
+  }
+}
+
 /**
+ * Identifier / phrase case transforms on last transcript.
+ * @param {"snake"|"camel"|"pascal"|"kebab"|"const"|"dot"|"path"|"words"|"title"|"train"} kind
+ */
+function caseText(raw, kind = "snake") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "snake");
+  const endsWithNl = /\r?\n$/.test(t);
+  const convertChunk = (chunk) => {
+    const words = splitIdentWords(chunk);
+    if (!words.length) return chunk;
+    return joinIdentWords(words, k);
+  };
+  const lines = t.split(/\r\n|\r|\n/);
+  const out = lines.map((l) => {
+    if (!l.trim()) return l;
+    const lead = (l.match(/^\s*/) || [""])[0];
+    const body = l.slice(lead.length);
+    return lead + convertChunk(body);
+  });
+  let s = out.join("\n");
+  if (endsWithNl && !s.endsWith("\n")) s += "\n";
+  return s;
+}
+
+/**
+ * Case-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function caseLast(kind = "snake") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for case", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = caseText(src, kind);
+  if (text === src) {
+    notify("Case made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -8065,6 +8170,22 @@ function rebuildTrayMenu() {
         { label: "Clean pipe table", click: () => tableLast("pipe-clean") },
       ],
     },
+    {
+      label: "Case last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "snake_case", click: () => caseLast("snake") },
+        { label: "camelCase", click: () => caseLast("camel") },
+        { label: "PascalCase", click: () => caseLast("pascal") },
+        { label: "kebab-case", click: () => caseLast("kebab") },
+        { label: "CONST_CASE", click: () => caseLast("const") },
+        { label: "dot.case", click: () => caseLast("dot") },
+        { label: "path/case", click: () => caseLast("path") },
+        { label: "lower words", click: () => caseLast("words") },
+        { label: "Title Case", click: () => caseLast("title") },
+        { label: "Train-Case", click: () => caseLast("train") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -8615,6 +8736,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "md"),
       text: tableText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("case-last", (_e, kind) =>
+    caseLast(String(kind || "snake"))
+  );
+  ipcMain.handle("case-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "snake"),
+      text: caseText(src, kind),
       source: src,
     };
   });

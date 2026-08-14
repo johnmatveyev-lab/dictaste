@@ -487,6 +487,20 @@
     <button type="button" id="tblPipe" class="ghost">Clean pipes</button>
   </div>
 
+  <label>Case last <span style="font-weight:400;color:var(--muted)">(snake · camel · Pascal · kebab · CONST · words · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="csSnake" class="ghost">snake</button>
+    <button type="button" id="csCamel" class="ghost">camel</button>
+    <button type="button" id="csPascal" class="ghost">Pascal</button>
+    <button type="button" id="csKebab" class="ghost">kebab</button>
+    <button type="button" id="csConst" class="ghost">CONST</button>
+    <button type="button" id="csDot" class="ghost">dot</button>
+    <button type="button" id="csPath" class="ghost">path</button>
+    <button type="button" id="csWords" class="ghost">words</button>
+    <button type="button" id="csTitle" class="ghost">Title</button>
+    <button type="button" id="csTrain" class="ghost">Train</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1820,6 +1834,22 @@
     document.getElementById('tblPairsCsv').onclick = () => tableNow('pairs-csv');
     document.getElementById('tblFromMd').onclick = () => tableNow('from-md');
     document.getElementById('tblPipe').onclick = () => tableNow('pipe-clean');
+    async function caseNow(kind) {
+      const r = await window.dictaste.caseLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Case: no changes' : ('Case · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Case failed');
+    }
+    document.getElementById('csSnake').onclick = () => caseNow('snake');
+    document.getElementById('csCamel').onclick = () => caseNow('camel');
+    document.getElementById('csPascal').onclick = () => caseNow('pascal');
+    document.getElementById('csKebab').onclick = () => caseNow('kebab');
+    document.getElementById('csConst').onclick = () => caseNow('const');
+    document.getElementById('csDot').onclick = () => caseNow('dot');
+    document.getElementById('csPath').onclick = () => caseNow('path');
+    document.getElementById('csWords').onclick = () => caseNow('words');
+    document.getElementById('csTitle').onclick = () => caseNow('title');
+    document.getElementById('csTrain').onclick = () => caseNow('train');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
