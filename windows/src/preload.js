@@ -81,6 +81,10 @@ contextBridge.exposeInMainWorld("dictaste", {
   commentPreview: (kind) => ipcRenderer.invoke("comment-preview", kind),
   quoteLast: (kind) => ipcRenderer.invoke("quote-last", kind),
   quotePreview: (kind) => ipcRenderer.invoke("quote-preview", kind),
+  diffLast: (kind) => ipcRenderer.invoke("diff-last", kind),
+  diffPreview: (kind) => ipcRenderer.invoke("diff-preview", kind),
+  alignLast: (kind) => ipcRenderer.invoke("align-last", kind),
+  alignPreview: (kind) => ipcRenderer.invoke("align-preview", kind),
   timestampLast: (kind) => ipcRenderer.invoke("timestamp-last", kind),
   timestampPreview: (kind) => ipcRenderer.invoke("timestamp-preview", kind),
   copyLastTranscript: (index, opts) =>

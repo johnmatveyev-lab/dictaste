@@ -56,6 +56,8 @@
  * - Comment last (// # block/HTML · strip · toggle)
  * - Timestamp last (ISO/local · per-line · strip)
  * - Quote last (double/single/backtick/smart · unwrap · toggle)
+ * - Diff last (vs previous history · clipboard · unified/stats)
+ * - Align last (colon/equals/pipe · numbers · compact)
  */
 const {
   app,
@@ -6942,6 +6944,358 @@ function quoteLast(kind = "double") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+function alignOnDelim(raw, delim) {
+  const t = String(raw || "");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const parsed = lines.map((l) => {
+    if (!l.trim()) return { blank: true, raw: l };
+    const idx = l.indexOf(delim);
+    if (idx < 0) return { blank: false, left: l.trimEnd(), right: null };
+    return {
+      blank: false,
+      left: l.slice(0, idx).trimEnd(),
+      right: l.slice(idx + delim.length).trimStart(),
+    };
+  });
+  const width = parsed.reduce((w, p) => {
+    if (p.blank || p.right === null) return w;
+    return Math.max(w, p.left.length);
+  }, 0);
+  const out = parsed.map((p) => {
+    if (p.blank) return p.raw;
+    if (p.right === null) return p.left;
+    return `${p.left.padEnd(width, " ")} ${delim.trim()} ${p.right}`;
+  });
+  let s = out.join("\n");
+  if (endsWithNl && !s.endsWith("\n")) s += "\n";
+  return s;
+}
+
+function compactDelim(raw, delim) {
+  const t = String(raw || "");
+  const endsWithNl = /\r?\n$/.test(t);
+  const re = new RegExp(`\\s*${delim.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\s*`, "g");
+  const lines = t.split(/\r\n|\r|\n/).map((l) => {
+    if (!l.trim() || !l.includes(delim)) return l;
+    return l.replace(re, ` ${delim.trim()} `).replace(/\s+$/, "");
+  });
+  let s = lines.join("\n");
+  if (endsWithNl && !s.endsWith("\n")) s += "\n";
+  return s;
+}
+
+function alignNumbers(raw) {
+  const t = String(raw || "");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const parsed = lines.map((l) => {
+    const m = l.match(/^(.*?)([+-]?(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?)\s*$/);
+    if (!m || !String(m[2] || "").length) return { raw: l, num: null };
+    return { raw: l, left: m[1].trimEnd(), num: m[2] };
+  });
+  const nWidth = parsed.reduce((w, p) => (p.num ? Math.max(w, p.num.length) : w), 0);
+  const out = parsed.map((p) => {
+    if (!p.num) return p.raw;
+    return `${p.left} ${p.num.padStart(nWidth, " ")}`.replace(/ +$/, "");
+  });
+  let s = out.join("\n");
+  if (endsWithNl && !s.endsWith("\n")) s += "\n";
+  return s;
+}
+
+function alignText(raw, kind = "colon") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  switch (String(kind || "colon")) {
+    case "equals":
+      return alignOnDelim(t, "=");
+    case "pipe":
+      return alignOnDelim(t, "|");
+    case "comma":
+      return alignOnDelim(t, ",");
+    case "arrow":
+      return t.includes("=>") ? alignOnDelim(t, "=>") : alignOnDelim(t, "->");
+    case "compact-colon":
+      return compactDelim(t, ":");
+    case "compact-equals":
+      return compactDelim(t, "=");
+    case "numbers":
+      return alignNumbers(t);
+    case "colon":
+    default:
+      return alignOnDelim(t, ":");
+  }
+}
+
+function alignLast(kind = "colon") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to align", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = alignText(src, kind);
+  if (text === src) {
+    notify("Align made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
+ * Diff last transcript against previous history item (or clipboard).
+ * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
+ */
+function diffText(a, b, kind = "unified") {
+  const left = String(a || "");
+  const right = String(b || "");
+  const k = String(kind || "unified");
+  const L = left.split(/\r\n|\r|\n/);
+  const R = right.split(/\r\n|\r|\n/);
+
+  // Simple LCS-free line diff (patience-lite): mark by set + order
+  const diffLines = () => {
+    const out = [];
+    let i = 0;
+    let j = 0;
+    while (i < L.length || j < R.length) {
+      if (i < L.length && j < R.length && L[i] === R[j]) {
+        out.push({ t: " ", line: L[i] });
+        i++;
+        j++;
+        continue;
+      }
+      // look ahead small window
+      let found = false;
+      for (let look = 1; look <= 8 && !found; look++) {
+        if (i + look < L.length && j < R.length && L[i + look] === R[j]) {
+          for (let x = 0; x < look; x++) out.push({ t: "-", line: L[i + x] });
+          i += look;
+          found = true;
+          break;
+        }
+        if (j + look < R.length && i < L.length && L[i] === R[j + look]) {
+          for (let x = 0; x < look; x++) out.push({ t: "+", line: R[j + x] });
+          j += look;
+          found = true;
+          break;
+        }
+      }
+      if (found) continue;
+      if (i < L.length && j < R.length) {
+        out.push({ t: "-", line: L[i++] });
+        out.push({ t: "+", line: R[j++] });
+      } else if (i < L.length) {
+        out.push({ t: "-", line: L[i++] });
+      } else if (j < R.length) {
+        out.push({ t: "+", line: R[j++] });
+      }
+    }
+    return out;
+  };
+
+  const rows = diffLines();
+  const added = rows.filter((r) => r.t === "+").length;
+  const removed = rows.filter((r) => r.t === "-").length;
+  const same = rows.filter((r) => r.t === " ").length;
+
+  switch (k) {
+    case "only-added":
+      return rows
+        .filter((r) => r.t === "+")
+        .map((r) => r.line)
+        .join("\n");
+    case "only-removed":
+      return rows
+        .filter((r) => r.t === "-")
+        .map((r) => r.line)
+        .join("\n");
+    case "stats":
+      return (
+        "Diff stats\n" +
+        "- same lines: " +
+        same +
+        "\n" +
+        "- removed: " +
+        removed +
+        "\n" +
+        "- added: " +
+        added +
+        "\n" +
+        "- left lines: " +
+        L.length +
+        "\n" +
+        "- right lines: " +
+        R.length +
+        (left === right ? "\n- identical: yes" : "\n- identical: no")
+      );
+    case "side-by-side": {
+      const width = Math.min(
+        40,
+        Math.max(
+          12,
+          ...L.map((l) => l.length),
+          ...R.map((l) => l.length),
+          12
+        )
+      );
+      const pad = (s) => {
+        const t = String(s || "");
+        return (t.length > width ? t.slice(0, width - 1) + "…" : t).padEnd(
+          width,
+          " "
+        );
+      };
+      const max = Math.max(L.length, R.length);
+      const lines = ["PREV".padEnd(width, " ") + " | " + "LAST"];
+      lines.push("-".repeat(width) + "-+-" + "-".repeat(width));
+      for (let n = 0; n < max; n++) {
+        const a = L[n] != null ? L[n] : "";
+        const b = R[n] != null ? R[n] : "";
+        const mark = a === b ? " " : a && b ? "~" : a ? "-" : "+";
+        lines.push(pad(a) + " " + mark + "| " + b);
+      }
+      return lines.join("\n");
+    }
+    case "word": {
+      const wL = left.trim().split(/\s+/).filter(Boolean);
+      const wR = right.trim().split(/\s+/).filter(Boolean);
+      const setL = new Set(wL.map((w) => w.toLowerCase()));
+      const setR = new Set(wR.map((w) => w.toLowerCase()));
+      const onlyL = [...setL].filter((w) => !setR.has(w));
+      const onlyR = [...setR].filter((w) => !setL.has(w));
+      return (
+        "Word diff\n" +
+        "- only in previous (" +
+        onlyL.length +
+        "): " +
+        (onlyL.slice(0, 40).join(", ") || "—") +
+        "\n" +
+        "- only in last (" +
+        onlyR.length +
+        "): " +
+        (onlyR.slice(0, 40).join(", ") || "—")
+      );
+    }
+    case "context": {
+      // show only changed hunks with 1 context line
+      const out = [];
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (r.t === " ") continue;
+        if (i > 0 && rows[i - 1].t === " ") {
+          out.push("  " + rows[i - 1].line);
+        }
+        out.push(r.t + " " + r.line);
+        if (i + 1 < rows.length && rows[i + 1].t === " ") {
+          out.push("  " + rows[i + 1].line);
+        }
+      }
+      return out.length ? out.join("\n") : "(no differences)";
+    }
+    case "unified":
+    default:
+      return rows.map((r) => r.t + " " + r.line).join("\n");
+  }
+}
+
+/**
+ * Diff last history item vs previous (or clipboard) and paste report.
+ * Right side = last transcript; left = previous history or clipboard.
+ */
+function diffLast(kind = "unified") {
+  const k = String(kind || "unified");
+  const right = getLatestTranscript();
+  if (!right) {
+    notify("No transcript to diff", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  let left = "";
+  if (k === "vs-clipboard") {
+    try {
+      left = clipboard.readText() || "";
+    } catch {
+      left = "";
+    }
+    if (!left) {
+      notify("Clipboard empty for diff", { force: true });
+      return { ok: false, error: "clipboard-empty" };
+    }
+  } else {
+    try {
+      const hist = normalizeHistory(cfg?.history);
+      // history[0] is usually last; previous is [1]
+      if (hist.length >= 2) {
+        left = String(hist[1] || "");
+        // if history[0] differs from getLatestTranscript, still use [1] as prev
+      } else {
+        const pinned = normalizePinned(cfg?.pinnedHistory);
+        if (pinned.length >= 2) left = String(pinned[1] || "");
+      }
+    } catch {
+      left = "";
+    }
+    if (!left) {
+      notify("Need a previous history item to diff", { force: true });
+      return { ok: false, error: "no-previous" };
+    }
+  }
+  const text = diffText(left, right, k === "vs-clipboard" ? "unified" : k);
+  if (!String(text || "").length) {
+    notify("Diff empty", { force: true });
+    return { ok: false, error: "none" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    // put report as new top without losing original last if different
+    if (hist.length && String(hist[0] || "").trim() === right) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      // prepend as new history item via push if available
+      if (typeof pushHistory === "function") {
+        pushHistory(text);
+      } else {
+        hist.unshift(text);
+        cfg = { ...cfg, history: hist.slice(0, cfg?.historySize || 30) };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind: k, deliver: del.mode, source: right };
+}
+
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -8669,6 +9023,34 @@ function rebuildTrayMenu() {
         { label: "Unwrap", click: () => quoteLast("unwrap") },
       ],
     },
+    {
+      label: "Diff last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Unified (prev vs last)", click: () => diffLast("unified") },
+        { label: "Context hunks", click: () => diffLast("context") },
+        { label: "Only added lines", click: () => diffLast("only-added") },
+        { label: "Only removed lines", click: () => diffLast("only-removed") },
+        { label: "Side-by-side", click: () => diffLast("side-by-side") },
+        { label: "Word diff", click: () => diffLast("word") },
+        { label: "Stats", click: () => diffLast("stats") },
+        { label: "Vs clipboard (unified)", click: () => diffLast("vs-clipboard") },
+      ],
+    },
+    {
+      label: "Align last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Align on :", click: () => alignLast("colon") },
+        { label: "Align on =", click: () => alignLast("equals") },
+        { label: "Align on |", click: () => alignLast("pipe") },
+        { label: "Align on ,", click: () => alignLast("comma") },
+        { label: "Align on => / ->", click: () => alignLast("arrow") },
+        { label: "Align trailing numbers", click: () => alignLast("numbers") },
+        { label: "Compact :", click: () => alignLast("compact-colon") },
+        { label: "Compact =", click: () => alignLast("compact-equals") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -9261,6 +9643,19 @@ app.whenReady().then(() => {
       source: src,
     };
   });
+  ipcMain.handle("align-last", (_e, kind) =>
+    alignLast(String(kind || "colon"))
+  );
+  ipcMain.handle("align-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "colon"),
+      text: alignText(src, kind),
+      source: src,
+    };
+  });
   ipcMain.handle("timestamp-last", (_e, kind) =>
     timestampLast(String(kind || "iso-prefix"))
   );
@@ -9272,6 +9667,30 @@ app.whenReady().then(() => {
       kind: String(kind || "iso-prefix"),
       text: timestampText(src, kind),
       source: src,
+    };
+  });
+  ipcMain.handle("diff-last", (_e, kind) =>
+    diffLast(String(kind || "unified"))
+  );
+  ipcMain.handle("diff-preview", (_e, kind) => {
+    const k = String(kind || "unified");
+    const right = getLatestTranscript();
+    if (!right) return { ok: false, error: "empty" };
+    let left = "";
+    if (k === "vs-clipboard") {
+      try { left = clipboard.readText() || ""; } catch { left = ""; }
+    } else {
+      try {
+        const hist = normalizeHistory(cfg?.history);
+        if (hist.length >= 2) left = String(hist[1] || "");
+      } catch { left = ""; }
+    }
+    if (!left) return { ok: false, error: "no-previous" };
+    return {
+      ok: true,
+      kind: k,
+      text: diffText(left, right, k === "vs-clipboard" ? "unified" : k),
+      source: right,
     };
   });
 ipcMain.handle("copy-last-transcript", (_e, index, opts) =>

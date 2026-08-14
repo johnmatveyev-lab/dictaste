@@ -785,6 +785,24 @@ else fail("settings missing quote last");
 if (/quoteLast|quotePreview/.test(preload))
   pass("preload quote last");
 else fail("preload missing quote last");
+if (/alignLast|alignText|Align last/.test(main))
+  pass("main align last");
+else fail("main missing align last");
+if (/id="alColon"|alignLast|Align last/i.test(settings))
+  pass("settings align last");
+else fail("settings missing align last");
+if (/alignLast|alignPreview/.test(preload))
+  pass("preload align last");
+else fail("preload missing align last");
+if (/diffLast|diffText|Diff last/.test(main))
+  pass("main diff last");
+else fail("main missing diff last");
+if (/id="dfUnified"|diffLast|Diff last/i.test(settings))
+  pass("settings diff last");
+else fail("settings missing diff last");
+if (/diffLast|diffPreview/.test(preload))
+  pass("preload diff last");
+else fail("preload missing diff last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
