@@ -4981,6 +4981,185 @@ function rotateLinesLast(kind = "first-to-end") {
 }
 
 /**
+ * Soft-wrap text to a column width (break on spaces; hard-break overlong tokens).
+ * @param {string} text
+ * @param {number} width
+ * @param {string} eol
+ */
+function softWrapParagraph(text, width, eol) {
+  const w = Math.max(8, Number(width) || 80);
+  const s = String(text || "").replace(/[ \t]+/g, " ").trim();
+  if (!s) return "";
+  const words = s.split(" ");
+  const lines = [];
+  let cur = "";
+  for (const word of words) {
+    if (!word) continue;
+    if (!cur) {
+      if (word.length <= w) {
+        cur = word;
+      } else {
+        // hard-break long token
+        for (let i = 0; i < word.length; i += w) {
+          lines.push(word.slice(i, i + w));
+        }
+        cur = "";
+      }
+      continue;
+    }
+    if (cur.length + 1 + word.length <= w) {
+      cur = `${cur} ${word}`;
+    } else {
+      lines.push(cur);
+      if (word.length <= w) {
+        cur = word;
+      } else {
+        for (let i = 0; i < word.length; i += w) {
+          const chunk = word.slice(i, i + w);
+          if (i + w < word.length) lines.push(chunk);
+          else cur = chunk;
+        }
+      }
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.join(eol);
+}
+
+/**
+ * Soft wrap last transcript to fixed column widths.
+ * @param {"w40"|"w60"|"w72"|"w80"|"w100"|"w120"|"unwrap"|"indent-w80"} kind
+ */
+function softWrapText(raw, kind = "w80") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const k = String(kind || "w80");
+
+  if (k === "unwrap") {
+    // join soft-wrapped paragraphs: blank line = paragraph break
+    const paras = t.split(/\r\n\s*\r\n|\r\s*\r|\n\s*\n/);
+    return paras
+      .map((p) =>
+        p
+          .split(/\r\n|\r|\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .join(" ")
+      )
+      .filter(Boolean)
+      .join(eol + eol);
+  }
+
+  let width = 80;
+  let indent = "";
+  switch (k) {
+    case "w40":
+      width = 40;
+      break;
+    case "w60":
+      width = 60;
+      break;
+    case "w72":
+      width = 72;
+      break;
+    case "w100":
+      width = 100;
+      break;
+    case "w120":
+      width = 120;
+      break;
+    case "indent-w80":
+      width = 80;
+      indent = "  ";
+      break;
+    case "w80":
+    default:
+      width = 80;
+      break;
+  }
+
+  // preserve hard paragraph breaks (blank lines); wrap each non-empty paragraph
+  const blocks = t.split(/(\r\n\s*\r\n|\r\s*\r|\n\s*\n)/);
+  const out = [];
+  for (const block of blocks) {
+    if (/^(\r\n|\r|\n)+$/.test(block) || /^\s*$/.test(block) && block.includes("\n")) {
+      // paragraph separator — normalize to single blank line later
+      if (out.length && out[out.length - 1] !== "") out.push("");
+      continue;
+    }
+    if (!String(block || "").trim()) continue;
+    // if block already has newlines, treat each non-empty line as its own unit
+    // unless it looks like one long paragraph of soft-wrapped lines (no blank)
+    const lines = block.split(/\r\n|\r|\n/).filter((l) => l.length > 0);
+    const asPara = lines.map((l) => l.trim()).join(" ");
+    let wrapped = softWrapParagraph(asPara, width - indent.length, eol);
+    if (indent && wrapped) {
+      wrapped = wrapped
+        .split(eol)
+        .map((l) => (l ? indent + l : l))
+        .join(eol);
+    }
+    out.push(wrapped);
+  }
+  // collapse consecutive blanks
+  const flat = [];
+  for (const part of out) {
+    if (part === "") {
+      if (flat.length && flat[flat.length - 1] !== "") flat.push("");
+    } else {
+      flat.push(part);
+    }
+  }
+  return flat.join(eol);
+}
+
+/**
+ * Soft wrap last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function softWrapLast(kind = "w80") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to wrap", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = softWrapText(src, kind);
+  if (!String(text || "").length) {
+    notify("Nothing to wrap", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Soft wrap made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6503,6 +6682,20 @@ function rebuildTrayMenu() {
         { label: "Blanks → start", click: () => rotateLinesLast("move-blank-start") },
       ],
     },
+    {
+      label: "Soft wrap last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Width 40", click: () => softWrapLast("w40") },
+        { label: "Width 60", click: () => softWrapLast("w60") },
+        { label: "Width 72", click: () => softWrapLast("w72") },
+        { label: "Width 80", click: () => softWrapLast("w80") },
+        { label: "Width 100", click: () => softWrapLast("w100") },
+        { label: "Width 120", click: () => softWrapLast("w120") },
+        { label: "Indent + width 80", click: () => softWrapLast("indent-w80") },
+        { label: "Unwrap paragraphs", click: () => softWrapLast("unwrap") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6936,6 +7129,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "first-to-end"),
       text: rotateLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("soft-wrap-last", (_e, kind) =>
+    softWrapLast(String(kind || "w80"))
+  );
+  ipcMain.handle("soft-wrap-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "w80"),
+      text: softWrapText(src, kind),
       source: src,
     };
   });

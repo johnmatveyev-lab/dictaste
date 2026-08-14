@@ -666,6 +666,15 @@ else fail("settings missing rotate lines last");
 if (/rotateLinesLast|rotateLinesPreview/.test(preload))
   pass("preload rotate lines last");
 else fail("preload missing rotate lines last");
+if (/softWrapLast|softWrapText|Soft wrap last/.test(main))
+  pass("main soft wrap last");
+else fail("main missing soft wrap last");
+if (/id="sw80"|softWrapLast|Soft wrap last/i.test(settings))
+  pass("settings soft wrap last");
+else fail("settings missing soft wrap last");
+if (/softWrapLast|softWrapPreview/.test(preload))
+  pass("preload soft wrap last");
+else fail("preload missing soft wrap last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

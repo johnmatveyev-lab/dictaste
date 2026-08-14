@@ -57,6 +57,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   whitespacePreview: (kind) => ipcRenderer.invoke("whitespace-preview", kind),
   rotateLinesLast: (kind) => ipcRenderer.invoke("rotate-lines-last", kind),
   rotateLinesPreview: (kind) => ipcRenderer.invoke("rotate-lines-preview", kind),
+  softWrapLast: (kind) => ipcRenderer.invoke("soft-wrap-last", kind),
+  softWrapPreview: (kind) => ipcRenderer.invoke("soft-wrap-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

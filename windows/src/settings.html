@@ -366,6 +366,18 @@
     <button type="button" id="rotBlankStart" class="ghost">Blanks→start</button>
   </div>
 
+  <label>Soft wrap last <span style="font-weight:400;color:var(--muted)">(width 40–120 · indent · unwrap paragraphs · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="sw40" class="ghost">40</button>
+    <button type="button" id="sw60" class="ghost">60</button>
+    <button type="button" id="sw72" class="ghost">72</button>
+    <button type="button" id="sw80" class="ghost">80</button>
+    <button type="button" id="sw100" class="ghost">100</button>
+    <button type="button" id="sw120" class="ghost">120</button>
+    <button type="button" id="swIndent80" class="ghost">Indent 80</button>
+    <button type="button" id="swUnwrap" class="ghost">Unwrap</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1554,6 +1566,22 @@
     document.getElementById('rotEvens').onclick = () => rotateLinesNow('evens-first');
     document.getElementById('rotBlankEnd').onclick = () => rotateLinesNow('move-blank-end');
     document.getElementById('rotBlankStart').onclick = () => rotateLinesNow('move-blank-start');
+    async function softWrapNow(kind) {
+      const r = await window.dictaste.softWrapLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Soft wrap failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('sw40').onclick = () => softWrapNow('w40');
+    document.getElementById('sw60').onclick = () => softWrapNow('w60');
+    document.getElementById('sw72').onclick = () => softWrapNow('w72');
+    document.getElementById('sw80').onclick = () => softWrapNow('w80');
+    document.getElementById('sw100').onclick = () => softWrapNow('w100');
+    document.getElementById('sw120').onclick = () => softWrapNow('w120');
+    document.getElementById('swIndent80').onclick = () => softWrapNow('indent-w80');
+    document.getElementById('swUnwrap').onclick = () => softWrapNow('unwrap');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
