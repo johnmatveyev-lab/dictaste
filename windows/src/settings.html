@@ -568,6 +568,18 @@
     <button type="button" id="dfClip" class="ghost">Vs clipboard</button>
   </div>
 
+  <label>Increment last <span style="font-weight:400;color:var(--muted)">(all/first/last number · +1/−1 · +10 · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="incAll" class="ghost">All +1</button>
+    <button type="button" id="incAllM" class="ghost">All −1</button>
+    <button type="button" id="incFirst" class="ghost">First +1</button>
+    <button type="button" id="incFirstM" class="ghost">First −1</button>
+    <button type="button" id="incLast" class="ghost">Last +1</button>
+    <button type="button" id="incLastM" class="ghost">Last −1</button>
+    <button type="button" id="inc10" class="ghost">All +10</button>
+    <button type="button" id="inc10M" class="ghost">All −10</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1994,6 +2006,20 @@
     document.getElementById('alNum').onclick = () => alignNow('numbers');
     document.getElementById('alCompColon').onclick = () => alignNow('compact-colon');
     document.getElementById('alCompEq').onclick = () => alignNow('compact-equals');
+    async function incrementNow(kind) {
+      const r = await window.dictaste.incrementLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Increment: no changes' : ('Increment · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Increment failed');
+    }
+    document.getElementById('incAll').onclick = () => incrementNow('all-plus');
+    document.getElementById('incAllM').onclick = () => incrementNow('all-minus');
+    document.getElementById('incFirst').onclick = () => incrementNow('first-plus');
+    document.getElementById('incFirstM').onclick = () => incrementNow('first-minus');
+    document.getElementById('incLast').onclick = () => incrementNow('last-plus');
+    document.getElementById('incLastM').onclick = () => incrementNow('last-minus');
+    document.getElementById('inc10').onclick = () => incrementNow('plus-10');
+    document.getElementById('inc10M').onclick = () => incrementNow('minus-10');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

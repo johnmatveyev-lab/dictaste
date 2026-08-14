@@ -803,6 +803,15 @@ else fail("settings missing diff last");
 if (/diffLast|diffPreview/.test(preload))
   pass("preload diff last");
 else fail("preload missing diff last");
+if (/incrementLast|incrementText|Increment last/.test(main))
+  pass("main increment last");
+else fail("main missing increment last");
+if (/id="incAll"|incrementLast|Increment last/i.test(settings))
+  pass("settings increment last");
+else fail("settings missing increment last");
+if (/incrementLast|incrementPreview/.test(preload))
+  pass("preload increment last");
+else fail("preload missing increment last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

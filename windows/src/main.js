@@ -58,6 +58,7 @@
  * - Quote last (double/single/backtick/smart · unwrap · toggle)
  * - Diff last (vs previous history · clipboard · unified/stats)
  * - Align last (colon/equals/pipe · numbers · compact)
+ * - Increment last (all/first/last · +1/-1 · pad)
  */
 const {
   app,
@@ -7063,6 +7064,122 @@ function alignLast(kind = "colon") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+const INC_NUM_RE = /(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?/g;
+
+function bumpNumericToken(token, delta) {
+  const raw = String(token);
+  const comma = raw.includes(",");
+  const plain = raw.replace(/,/g, "");
+  const dot = plain.indexOf(".");
+  if (dot >= 0) {
+    const frac = plain.length - dot - 1;
+    const n = Number(plain) + delta;
+    if (!Number.isFinite(n)) return raw;
+    return n.toFixed(frac);
+  }
+  const width = /^\d+$/.test(plain) && plain.startsWith("0") && plain.length > 1 ? plain.length : 0;
+  const n = parseInt(plain, 10) + delta;
+  if (!Number.isFinite(n)) return raw;
+  let out = String(n);
+  if (width) out = out.replace("-", "").padStart(width, "0");
+  if (n < 0 && width) out = "-" + out;
+  if (comma && Math.abs(n) >= 1000) {
+    const sign = n < 0 ? "-" : "";
+    const abs = String(Math.abs(n));
+    out = sign + abs.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  return out;
+}
+
+function incrementText(raw, kind = "all-plus") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "all-plus");
+  const matches = [...t.matchAll(INC_NUM_RE)];
+  if (!matches.length) return t;
+
+  let delta = 1;
+  let mode = "all";
+  switch (k) {
+    case "all-minus":
+      delta = -1;
+      break;
+    case "first-plus":
+      mode = "first";
+      break;
+    case "first-minus":
+      mode = "first";
+      delta = -1;
+      break;
+    case "last-plus":
+      mode = "last";
+      break;
+    case "last-minus":
+      mode = "last";
+      delta = -1;
+      break;
+    case "plus-10":
+      delta = 10;
+      break;
+    case "minus-10":
+      delta = -10;
+      break;
+    case "all-plus":
+    default:
+      break;
+  }
+
+  let pick = null;
+  if (mode === "first") pick = 0;
+  if (mode === "last") pick = matches.length - 1;
+  let out = "";
+  let cursor = 0;
+  matches.forEach((m, i) => {
+    const idx = m.index ?? 0;
+    out += t.slice(cursor, idx);
+    const apply = pick === null || i === pick;
+    out += apply ? bumpNumericToken(m[0], delta) : m[0];
+    cursor = idx + m[0].length;
+  });
+  out += t.slice(cursor);
+  return out;
+}
+
+function incrementLast(kind = "all-plus") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to increment", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = incrementText(src, kind);
+  if (text === src) {
+    notify("Increment made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
@@ -9051,6 +9168,20 @@ function rebuildTrayMenu() {
         { label: "Compact =", click: () => alignLast("compact-equals") },
       ],
     },
+    {
+      label: "Increment last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "All numbers +1", click: () => incrementLast("all-plus") },
+        { label: "All numbers −1", click: () => incrementLast("all-minus") },
+        { label: "First number +1", click: () => incrementLast("first-plus") },
+        { label: "First number −1", click: () => incrementLast("first-minus") },
+        { label: "Last number +1", click: () => incrementLast("last-plus") },
+        { label: "Last number −1", click: () => incrementLast("last-minus") },
+        { label: "All +10", click: () => incrementLast("plus-10") },
+        { label: "All −10", click: () => incrementLast("minus-10") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -9653,6 +9784,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "colon"),
       text: alignText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("increment-last", (_e, kind) =>
+    incrementLast(String(kind || "all-plus"))
+  );
+  ipcMain.handle("increment-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "all-plus"),
+      text: incrementText(src, kind),
       source: src,
     };
   });

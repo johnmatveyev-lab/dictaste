@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   diffPreview: (kind) => ipcRenderer.invoke("diff-preview", kind),
   alignLast: (kind) => ipcRenderer.invoke("align-last", kind),
   alignPreview: (kind) => ipcRenderer.invoke("align-preview", kind),
+  incrementLast: (kind) => ipcRenderer.invoke("increment-last", kind),
+  incrementPreview: (kind) => ipcRenderer.invoke("increment-preview", kind),
   timestampLast: (kind) => ipcRenderer.invoke("timestamp-last", kind),
   timestampPreview: (kind) => ipcRenderer.invoke("timestamp-preview", kind),
   copyLastTranscript: (index, opts) =>
