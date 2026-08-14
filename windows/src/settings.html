@@ -264,6 +264,25 @@
     <button type="button" id="splitParagraphs" class="ghost">Paragraphs</button>
   </div>
 
+  <label>Prefix/suffix lines last <span style="font-weight:400;color:var(--muted)">(bullets · quote · checkbox · indent · period · strip · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="psBullet" class="ghost">- bullet</button>
+    <button type="button" id="psStar" class="ghost">* star</button>
+    <button type="button" id="psQuote" class="ghost">&gt; quote</button>
+    <button type="button" id="psCheckbox" class="ghost">[ ]</button>
+    <button type="button" id="psArrow" class="ghost">→</button>
+    <button type="button" id="psDash" class="ghost">—</button>
+    <button type="button" id="psIndent2" class="ghost">Indent 2</button>
+    <button type="button" id="psIndent4" class="ghost">Indent 4</button>
+    <button type="button" id="psTab" class="ghost">Tab</button>
+    <button type="button" id="psOutdent" class="ghost">Outdent</button>
+    <button type="button" id="psPeriod" class="ghost">. period</button>
+    <button type="button" id="psComma" class="ghost">, comma</button>
+    <button type="button" id="psSemicolon" class="ghost">;</button>
+    <button type="button" id="psStripBullet" class="ghost">Strip bullets</button>
+    <button type="button" id="psStripIndent" class="ghost">Strip indent</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1326,6 +1345,29 @@
     document.getElementById('splitSpace').onclick = () => splitNow('space');
     document.getElementById('splitAnd').onclick = () => splitNow('and');
     document.getElementById('splitParagraphs').onclick = () => splitNow('paragraphs');
+    async function prefixSuffixNow(kind) {
+      const r = await window.dictaste.prefixSuffixLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Prefix/suffix failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('psBullet').onclick = () => prefixSuffixNow('bullet');
+    document.getElementById('psStar').onclick = () => prefixSuffixNow('star');
+    document.getElementById('psQuote').onclick = () => prefixSuffixNow('blockquote');
+    document.getElementById('psCheckbox').onclick = () => prefixSuffixNow('checkbox');
+    document.getElementById('psArrow').onclick = () => prefixSuffixNow('arrow');
+    document.getElementById('psDash').onclick = () => prefixSuffixNow('dash');
+    document.getElementById('psIndent2').onclick = () => prefixSuffixNow('indent2');
+    document.getElementById('psIndent4').onclick = () => prefixSuffixNow('indent4');
+    document.getElementById('psTab').onclick = () => prefixSuffixNow('tab');
+    document.getElementById('psOutdent').onclick = () => prefixSuffixNow('outdent');
+    document.getElementById('psPeriod').onclick = () => prefixSuffixNow('period');
+    document.getElementById('psComma').onclick = () => prefixSuffixNow('comma');
+    document.getElementById('psSemicolon').onclick = () => prefixSuffixNow('semicolon');
+    document.getElementById('psStripBullet').onclick = () => prefixSuffixNow('strip-bullet');
+    document.getElementById('psStripIndent').onclick = () => prefixSuffixNow('strip-indent');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

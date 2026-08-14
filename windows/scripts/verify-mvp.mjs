@@ -612,6 +612,15 @@ else fail("settings missing split last");
 if (/splitLast|splitPreview/.test(preload))
   pass("preload split last");
 else fail("preload missing split last");
+if (/prefixSuffixLinesLast|prefixSuffixLinesText|Prefix\/suffix lines last/.test(main))
+  pass("main prefix/suffix lines last");
+else fail("main missing prefix/suffix lines last");
+if (/id="psBullet"|prefixSuffixLinesLast|Prefix\/suffix lines last/i.test(settings))
+  pass("settings prefix/suffix lines last");
+else fail("settings missing prefix/suffix lines last");
+if (/prefixSuffixLinesLast|prefixSuffixLinesPreview/.test(preload))
+  pass("preload prefix/suffix lines last");
+else fail("preload missing prefix/suffix lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

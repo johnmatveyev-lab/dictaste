@@ -4254,6 +4254,104 @@ function splitLast(kind = "sentences") {
 }
 
 /**
+ * Prefix / suffix / indent each non-empty line of last transcript.
+ * @param {"bullet"|"star"|"blockquote"|"checkbox"|"arrow"|"dash"|"indent2"|"indent4"|"tab"|"outdent"|"period"|"comma"|"semicolon"|"strip-bullet"|"strip-indent"} kind
+ */
+function prefixSuffixLinesText(raw, kind = "bullet") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const lines = t.split(/\r\n|\r|\n/);
+  const k = String(kind || "bullet");
+  const mapLine = (l) => {
+    const blank = !String(l || "").trim();
+    if (blank) return l;
+    switch (k) {
+      case "star":
+        return l.replace(/^(\s*)/, "$1* ");
+      case "blockquote":
+        return l.replace(/^(\s*)/, "$1> ");
+      case "checkbox":
+        return l.replace(/^(\s*)/, "$1[ ] ");
+      case "arrow":
+        return l.replace(/^(\s*)/, "$1→ ");
+      case "dash":
+        return l.replace(/^(\s*)/, "$1— ");
+      case "indent2":
+        return `  ${l}`;
+      case "indent4":
+        return `    ${l}`;
+      case "tab":
+        return `\t${l}`;
+      case "outdent":
+        return l.replace(/^( {1,4}|\t)/, "");
+      case "period":
+        return /[.!?…]$/.test(l.trimEnd()) ? l : `${l.trimEnd()}.`;
+      case "comma":
+        return /[,;:]$/.test(l.trimEnd()) ? l : `${l.trimEnd()},`;
+      case "semicolon":
+        return /[;]$/.test(l.trimEnd()) ? l : `${l.trimEnd()};`;
+      case "strip-bullet":
+        return l.replace(
+          /^(\s*)(?:[-*•—→]|\[[ xX]\]|>)\s+/,
+          "$1"
+        );
+      case "strip-indent":
+        return l.replace(/^(?: {1,4}|\t)+/, "");
+      case "bullet":
+      default:
+        return l.replace(/^(\s*)/, "$1- ");
+    }
+  };
+  return lines.map(mapLine).join(eol);
+}
+
+/**
+ * Prefix/suffix/indent lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function prefixSuffixLinesLast(kind = "bullet") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to prefix/suffix", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = prefixSuffixLinesText(src, kind);
+  if (!text) {
+    notify("Nothing to change", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Prefix/suffix made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -5662,6 +5760,27 @@ function rebuildTrayMenu() {
         { label: "Paragraphs → lines", click: () => splitLast("paragraphs") },
       ],
     },
+    {
+      label: "Prefix/suffix lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Prefix - bullet", click: () => prefixSuffixLinesLast("bullet") },
+        { label: "Prefix * star", click: () => prefixSuffixLinesLast("star") },
+        { label: "Prefix > quote", click: () => prefixSuffixLinesLast("blockquote") },
+        { label: "Prefix [ ] checkbox", click: () => prefixSuffixLinesLast("checkbox") },
+        { label: "Prefix → arrow", click: () => prefixSuffixLinesLast("arrow") },
+        { label: "Prefix — dash", click: () => prefixSuffixLinesLast("dash") },
+        { label: "Indent 2 spaces", click: () => prefixSuffixLinesLast("indent2") },
+        { label: "Indent 4 spaces", click: () => prefixSuffixLinesLast("indent4") },
+        { label: "Indent tab", click: () => prefixSuffixLinesLast("tab") },
+        { label: "Outdent", click: () => prefixSuffixLinesLast("outdent") },
+        { label: "Suffix period", click: () => prefixSuffixLinesLast("period") },
+        { label: "Suffix comma", click: () => prefixSuffixLinesLast("comma") },
+        { label: "Suffix semicolon", click: () => prefixSuffixLinesLast("semicolon") },
+        { label: "Strip bullets/quotes", click: () => prefixSuffixLinesLast("strip-bullet") },
+        { label: "Strip indent", click: () => prefixSuffixLinesLast("strip-indent") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6017,6 +6136,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "sentences"),
       text: splitText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("prefix-suffix-lines-last", (_e, kind) =>
+    prefixSuffixLinesLast(String(kind || "bullet"))
+  );
+  ipcMain.handle("prefix-suffix-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "bullet"),
+      text: prefixSuffixLinesText(src, kind),
       source: src,
     };
   });

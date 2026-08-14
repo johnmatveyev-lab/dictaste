@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld("dictaste", {
   joinLinesPreview: (kind) => ipcRenderer.invoke("join-lines-preview", kind),
   splitLast: (kind) => ipcRenderer.invoke("split-last", kind),
   splitPreview: (kind) => ipcRenderer.invoke("split-preview", kind),
+  prefixSuffixLinesLast: (kind) =>
+    ipcRenderer.invoke("prefix-suffix-lines-last", kind),
+  prefixSuffixLinesPreview: (kind) =>
+    ipcRenderer.invoke("prefix-suffix-lines-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>
