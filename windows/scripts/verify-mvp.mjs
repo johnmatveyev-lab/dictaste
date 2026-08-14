@@ -630,6 +630,15 @@ else fail("settings missing pad lines last");
 if (/padLinesLast|padLinesPreview/.test(preload))
   pass("preload pad lines last");
 else fail("preload missing pad lines last");
+if (/truncateLast|truncateText|Truncate last/.test(main))
+  pass("main truncate last");
+else fail("main missing truncate last");
+if (/id="truncFirstLine"|truncateLast|Truncate last/i.test(settings))
+  pass("settings truncate last");
+else fail("settings missing truncate last");
+if (/truncateLast|truncatePreview/.test(preload))
+  pass("preload truncate last");
+else fail("preload missing truncate last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

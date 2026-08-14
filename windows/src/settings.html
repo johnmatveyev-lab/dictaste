@@ -299,6 +299,24 @@
     <button type="button" id="padWidth80" class="ghost">Width 80</button>
   </div>
 
+  <label>Truncate last <span style="font-weight:400;color:var(--muted)">(first/last lines · drop · words · chars · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="truncFirstLine" class="ghost">First line</button>
+    <button type="button" id="truncLastLine" class="ghost">Last line</button>
+    <button type="button" id="truncFirst3" class="ghost">First 3</button>
+    <button type="button" id="truncFirst5" class="ghost">First 5</button>
+    <button type="button" id="truncFirst10" class="ghost">First 10</button>
+    <button type="button" id="truncLast3" class="ghost">Last 3</button>
+    <button type="button" id="truncLast5" class="ghost">Last 5</button>
+    <button type="button" id="truncDropFirst" class="ghost">Drop first</button>
+    <button type="button" id="truncDropLast" class="ghost">Drop last</button>
+    <button type="button" id="truncWords50" class="ghost">50 words</button>
+    <button type="button" id="truncWords100" class="ghost">100 words</button>
+    <button type="button" id="truncChars100" class="ghost">100 chars</button>
+    <button type="button" id="truncChars280" class="ghost">280 chars</button>
+    <button type="button" id="truncChars500" class="ghost">500 chars</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1404,6 +1422,28 @@
     document.getElementById('padZero4').onclick = () => padLinesNow('zero4');
     document.getElementById('padWidth40').onclick = () => padLinesNow('width40');
     document.getElementById('padWidth80').onclick = () => padLinesNow('width80');
+    async function truncateNow(kind) {
+      const r = await window.dictaste.truncateLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Truncate failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('truncFirstLine').onclick = () => truncateNow('first-line');
+    document.getElementById('truncLastLine').onclick = () => truncateNow('last-line');
+    document.getElementById('truncFirst3').onclick = () => truncateNow('first-3');
+    document.getElementById('truncFirst5').onclick = () => truncateNow('first-5');
+    document.getElementById('truncFirst10').onclick = () => truncateNow('first-10');
+    document.getElementById('truncLast3').onclick = () => truncateNow('last-3');
+    document.getElementById('truncLast5').onclick = () => truncateNow('last-5');
+    document.getElementById('truncDropFirst').onclick = () => truncateNow('drop-first');
+    document.getElementById('truncDropLast').onclick = () => truncateNow('drop-last');
+    document.getElementById('truncWords50').onclick = () => truncateNow('words-50');
+    document.getElementById('truncWords100').onclick = () => truncateNow('words-100');
+    document.getElementById('truncChars100').onclick = () => truncateNow('chars-100');
+    document.getElementById('truncChars280').onclick = () => truncateNow('chars-280');
+    document.getElementById('truncChars500').onclick = () => truncateNow('chars-500');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

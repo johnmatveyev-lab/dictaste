@@ -4460,6 +4460,121 @@ function padLinesLast(kind = "align-left") {
 }
 
 /**
+ * Truncate last transcript by lines / words / chars.
+ * @param {"first-line"|"last-line"|"first-3"|"first-5"|"first-10"|"last-3"|"last-5"|"drop-first"|"drop-last"|"words-50"|"words-100"|"chars-100"|"chars-280"|"chars-500"} kind
+ */
+function truncateText(raw, kind = "first-line") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const lines = t.split(/\r\n|\r|\n/);
+  const k = String(kind || "first-line");
+
+  const takeWords = (n) => {
+    const words = t.match(/[^\s]+/g) || [];
+    if (!words.length) return "";
+    if (words.length <= n) return t.trimEnd();
+    // rebuild from original spacing roughly: first n word tokens joined by space
+    return words.slice(0, n).join(" ");
+  };
+
+  const takeChars = (n) => {
+    if (t.length <= n) return t;
+    // avoid cutting mid-surrogate; slice is fine for BMP-heavy dictation
+    let out = t.slice(0, n);
+    // if we cut mid-word, trim back to last space when possible
+    if (n < t.length && /\S/.test(t[n] || "") && /\S/.test(out[out.length - 1] || "")) {
+      const sp = out.lastIndexOf(" ");
+      if (sp > Math.floor(n * 0.5)) out = out.slice(0, sp);
+    }
+    return out.trimEnd();
+  };
+
+  switch (k) {
+    case "last-line": {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (String(lines[i] || "").trim()) return lines[i];
+      }
+      return lines[lines.length - 1] || "";
+    }
+    case "first-3":
+      return lines.slice(0, 3).join(eol);
+    case "first-5":
+      return lines.slice(0, 5).join(eol);
+    case "first-10":
+      return lines.slice(0, 10).join(eol);
+    case "last-3":
+      return lines.slice(-3).join(eol);
+    case "last-5":
+      return lines.slice(-5).join(eol);
+    case "drop-first":
+      return lines.length <= 1 ? "" : lines.slice(1).join(eol);
+    case "drop-last":
+      return lines.length <= 1 ? "" : lines.slice(0, -1).join(eol);
+    case "words-50":
+      return takeWords(50);
+    case "words-100":
+      return takeWords(100);
+    case "chars-100":
+      return takeChars(100);
+    case "chars-280":
+      return takeChars(280);
+    case "chars-500":
+      return takeChars(500);
+    case "first-line":
+    default:
+      return lines[0] || "";
+  }
+}
+
+/**
+ * Truncate last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function truncateLast(kind = "first-line") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to truncate", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = truncateText(src, kind);
+  if (text === "" && String(kind || "").startsWith("drop")) {
+    // allow empty after drop when only one line
+  } else if (!String(text || "").length) {
+    notify("Nothing left after truncate", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Truncate made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -5907,6 +6022,26 @@ function rebuildTrayMenu() {
         { label: "Pad end to width 80", click: () => padLinesLast("width80") },
       ],
     },
+    {
+      label: "Truncate last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "First line", click: () => truncateLast("first-line") },
+        { label: "Last line", click: () => truncateLast("last-line") },
+        { label: "First 3 lines", click: () => truncateLast("first-3") },
+        { label: "First 5 lines", click: () => truncateLast("first-5") },
+        { label: "First 10 lines", click: () => truncateLast("first-10") },
+        { label: "Last 3 lines", click: () => truncateLast("last-3") },
+        { label: "Last 5 lines", click: () => truncateLast("last-5") },
+        { label: "Drop first line", click: () => truncateLast("drop-first") },
+        { label: "Drop last line", click: () => truncateLast("drop-last") },
+        { label: "First 50 words", click: () => truncateLast("words-50") },
+        { label: "First 100 words", click: () => truncateLast("words-100") },
+        { label: "First 100 chars", click: () => truncateLast("chars-100") },
+        { label: "First 280 chars", click: () => truncateLast("chars-280") },
+        { label: "First 500 chars", click: () => truncateLast("chars-500") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6288,6 +6423,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "align-left"),
       text: padLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("truncate-last", (_e, kind) =>
+    truncateLast(String(kind || "first-line"))
+  );
+  ipcMain.handle("truncate-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "first-line"),
+      text: truncateText(src, kind),
       source: src,
     };
   });

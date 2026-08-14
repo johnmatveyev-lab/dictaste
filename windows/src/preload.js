@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld("dictaste", {
     ipcRenderer.invoke("prefix-suffix-lines-preview", kind),
   padLinesLast: (kind) => ipcRenderer.invoke("pad-lines-last", kind),
   padLinesPreview: (kind) => ipcRenderer.invoke("pad-lines-preview", kind),
+  truncateLast: (kind) => ipcRenderer.invoke("truncate-last", kind),
+  truncatePreview: (kind) => ipcRenderer.invoke("truncate-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>
