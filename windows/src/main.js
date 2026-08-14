@@ -4575,6 +4575,166 @@ function truncateLast(kind = "first-line") {
 }
 
 /**
+ * Split a single delimited row. CSV supports basic double-quoted fields.
+ * @param {string} line
+ * @param {","|"\t"|"|"|";"} delim
+ */
+function splitDelimitedRow(line, delim) {
+  const s = String(line || "");
+  if (delim !== ",") {
+    return s.split(delim);
+  }
+  const out = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQ = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQ = true;
+    } else if (ch === ",") {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * Extract / convert columns of last transcript (CSV / TSV / pipe / semicolon).
+ * @param {"csv1"|"csv2"|"csv3"|"csv-last"|"csv-rest"|"tsv1"|"tsv2"|"tsv-last"|"pipe1"|"pipe-last"|"semi1"|"semi-last"|"csv-to-tsv"|"tsv-to-csv"|"pipe-to-tsv"} kind
+ */
+function columnsText(raw, kind = "csv1") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const lines = t.split(/\r\n|\r|\n/);
+  const k = String(kind || "csv1");
+
+  const mapCols = (delim, pick) =>
+    lines
+      .map((line) => {
+        if (!String(line || "").trim()) return "";
+        const cols = splitDelimitedRow(line, delim).map((c) => c.trim());
+        if (!cols.length) return "";
+        if (pick === "last") return cols[cols.length - 1] || "";
+        if (pick === "rest") return cols.slice(1).join(delim === "\t" ? "\t" : delim === "|" ? " | " : delim === ";" ? "; " : ", ");
+        const idx = Number(pick);
+        return cols[idx] != null ? cols[idx] : "";
+      })
+      .join(eol)
+      .replace(/(\r\n|\r|\n)+$/g, "");
+
+  const convert = (from, to) =>
+    lines
+      .map((line) => {
+        if (!String(line || "").trim()) return "";
+        const cols = splitDelimitedRow(line, from).map((c) => c.trim());
+        if (to === ",") {
+          return cols
+            .map((c) =>
+              /[",\n\r]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c
+            )
+            .join(",");
+        }
+        return cols.join(to);
+      })
+      .join(eol);
+
+  switch (k) {
+    case "csv2":
+      return mapCols(",", 1);
+    case "csv3":
+      return mapCols(",", 2);
+    case "csv-last":
+      return mapCols(",", "last");
+    case "csv-rest":
+      return mapCols(",", "rest");
+    case "tsv1":
+      return mapCols("\t", 0);
+    case "tsv2":
+      return mapCols("\t", 1);
+    case "tsv-last":
+      return mapCols("\t", "last");
+    case "pipe1":
+      return mapCols("|", 0);
+    case "pipe-last":
+      return mapCols("|", "last");
+    case "semi1":
+      return mapCols(";", 0);
+    case "semi-last":
+      return mapCols(";", "last");
+    case "csv-to-tsv":
+      return convert(",", "\t");
+    case "tsv-to-csv":
+      return convert("\t", ",");
+    case "pipe-to-tsv":
+      return convert("|", "\t");
+    case "csv1":
+    default:
+      return mapCols(",", 0);
+  }
+}
+
+/**
+ * Extract/convert columns of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function columnsLast(kind = "csv1") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for columns", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = columnsText(src, kind);
+  if (!String(text || "").trim()) {
+    notify("No columns extracted", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Columns made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6042,6 +6202,27 @@ function rebuildTrayMenu() {
         { label: "First 500 chars", click: () => truncateLast("chars-500") },
       ],
     },
+    {
+      label: "Columns last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "CSV · column 1", click: () => columnsLast("csv1") },
+        { label: "CSV · column 2", click: () => columnsLast("csv2") },
+        { label: "CSV · column 3", click: () => columnsLast("csv3") },
+        { label: "CSV · last column", click: () => columnsLast("csv-last") },
+        { label: "CSV · all but first", click: () => columnsLast("csv-rest") },
+        { label: "TSV · column 1", click: () => columnsLast("tsv1") },
+        { label: "TSV · column 2", click: () => columnsLast("tsv2") },
+        { label: "TSV · last column", click: () => columnsLast("tsv-last") },
+        { label: "Pipe · column 1", click: () => columnsLast("pipe1") },
+        { label: "Pipe · last column", click: () => columnsLast("pipe-last") },
+        { label: "Semicolon · column 1", click: () => columnsLast("semi1") },
+        { label: "Semicolon · last column", click: () => columnsLast("semi-last") },
+        { label: "CSV → TSV", click: () => columnsLast("csv-to-tsv") },
+        { label: "TSV → CSV", click: () => columnsLast("tsv-to-csv") },
+        { label: "Pipe → TSV", click: () => columnsLast("pipe-to-tsv") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6436,6 +6617,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "first-line"),
       text: truncateText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("columns-last", (_e, kind) =>
+    columnsLast(String(kind || "csv1"))
+  );
+  ipcMain.handle("columns-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "csv1"),
+      text: columnsText(src, kind),
       source: src,
     };
   });

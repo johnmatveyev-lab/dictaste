@@ -639,6 +639,15 @@ else fail("settings missing truncate last");
 if (/truncateLast|truncatePreview/.test(preload))
   pass("preload truncate last");
 else fail("preload missing truncate last");
+if (/columnsLast|columnsText|Columns last/.test(main))
+  pass("main columns last");
+else fail("main missing columns last");
+if (/id="colCsv1"|columnsLast|Columns last/i.test(settings))
+  pass("settings columns last");
+else fail("settings missing columns last");
+if (/columnsLast|columnsPreview/.test(preload))
+  pass("preload columns last");
+else fail("preload missing columns last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

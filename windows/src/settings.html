@@ -317,6 +317,25 @@
     <button type="button" id="truncChars500" class="ghost">500 chars</button>
   </div>
 
+  <label>Columns last <span style="font-weight:400;color:var(--muted)">(CSV/TSV/pipe/semi extract · convert · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="colCsv1" class="ghost">CSV col1</button>
+    <button type="button" id="colCsv2" class="ghost">CSV col2</button>
+    <button type="button" id="colCsv3" class="ghost">CSV col3</button>
+    <button type="button" id="colCsvLast" class="ghost">CSV last</button>
+    <button type="button" id="colCsvRest" class="ghost">CSV rest</button>
+    <button type="button" id="colTsv1" class="ghost">TSV col1</button>
+    <button type="button" id="colTsv2" class="ghost">TSV col2</button>
+    <button type="button" id="colTsvLast" class="ghost">TSV last</button>
+    <button type="button" id="colPipe1" class="ghost">Pipe col1</button>
+    <button type="button" id="colPipeLast" class="ghost">Pipe last</button>
+    <button type="button" id="colSemi1" class="ghost">; col1</button>
+    <button type="button" id="colSemiLast" class="ghost">; last</button>
+    <button type="button" id="colCsvToTsv" class="ghost">CSV→TSV</button>
+    <button type="button" id="colTsvToCsv" class="ghost">TSV→CSV</button>
+    <button type="button" id="colPipeToTsv" class="ghost">Pipe→TSV</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1444,6 +1463,29 @@
     document.getElementById('truncChars100').onclick = () => truncateNow('chars-100');
     document.getElementById('truncChars280').onclick = () => truncateNow('chars-280');
     document.getElementById('truncChars500').onclick = () => truncateNow('chars-500');
+    async function columnsNow(kind) {
+      const r = await window.dictaste.columnsLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Columns failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('colCsv1').onclick = () => columnsNow('csv1');
+    document.getElementById('colCsv2').onclick = () => columnsNow('csv2');
+    document.getElementById('colCsv3').onclick = () => columnsNow('csv3');
+    document.getElementById('colCsvLast').onclick = () => columnsNow('csv-last');
+    document.getElementById('colCsvRest').onclick = () => columnsNow('csv-rest');
+    document.getElementById('colTsv1').onclick = () => columnsNow('tsv1');
+    document.getElementById('colTsv2').onclick = () => columnsNow('tsv2');
+    document.getElementById('colTsvLast').onclick = () => columnsNow('tsv-last');
+    document.getElementById('colPipe1').onclick = () => columnsNow('pipe1');
+    document.getElementById('colPipeLast').onclick = () => columnsNow('pipe-last');
+    document.getElementById('colSemi1').onclick = () => columnsNow('semi1');
+    document.getElementById('colSemiLast').onclick = () => columnsNow('semi-last');
+    document.getElementById('colCsvToTsv').onclick = () => columnsNow('csv-to-tsv');
+    document.getElementById('colTsvToCsv').onclick = () => columnsNow('tsv-to-csv');
+    document.getElementById('colPipeToTsv').onclick = () => columnsNow('pipe-to-tsv');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
