@@ -3,7 +3,7 @@ import ApplicationServices
 import AVFoundation
 import Foundation
 
-/// Flow Read — auto-speak selected text via System / OpenAI / Gemini / Grok voices.
+/// Flow Read — auto-speak selected text via System / OpenAI / Gemini / Grok / NVIDIA voices.
 @MainActor
 final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     enum Provider: String, CaseIterable, Identifiable, Hashable {
@@ -11,6 +11,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         case openai
         case gemini
         case grok
+        case nvidia
 
         var id: String { rawValue }
 
@@ -20,6 +21,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
             case .openai: return "OpenAI"
             case .gemini: return "Gemini"
             case .grok: return "Grok (xAI)"
+            case .nvidia: return "NVIDIA (Magpie)"
             }
         }
     }
@@ -71,10 +73,14 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
     @Published var grokVoice: String = UserDefaults.standard.string(forKey: "flowReadGrokVoice") ?? "Ara" {
         didSet { UserDefaults.standard.set(grokVoice, forKey: "flowReadGrokVoice") }
     }
+    @Published var nvidiaVoice: String = UserDefaults.standard.string(forKey: "flowReadNvidiaVoice") ?? "English-US.Female-1" {
+        didSet { UserDefaults.standard.set(nvidiaVoice, forKey: "flowReadNvidiaVoice") }
+    }
 
-    /// Auto-read when text is selected (default on).
+    /// When true, start speaking as soon as text is selected (skips the Read button).
+    /// Default is false — show a Read chip near the cursor instead.
     @Published var autoReadEnabled: Bool = {
-        if UserDefaults.standard.object(forKey: "flowReadAuto") == nil { return true }
+        if UserDefaults.standard.object(forKey: "flowReadAuto") == nil { return false }
         return UserDefaults.standard.bool(forKey: "flowReadAuto")
     }() {
         didSet { UserDefaults.standard.set(autoReadEnabled, forKey: "flowReadAuto") }
@@ -83,6 +89,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
     @Published var openAIKeyStatus: KeyTestStatus = .untested
     @Published var geminiKeyStatus: KeyTestStatus = .untested
     @Published var grokKeyStatus: KeyTestStatus = .untested
+    @Published var nvidiaKeyStatus: KeyTestStatus = .untested
 
     static let openAIVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]
     static let geminiVoices = [
@@ -93,6 +100,19 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat",
     ]
     static let grokVoices = ["Ara", "Eve", "Leo", "Rex", "Sal"]
+    /// Magpie multilingual speaker IDs commonly accepted by NIM TTS.
+    static let nvidiaVoices = [
+        "English-US.Female-1",
+        "English-US.Male-1",
+        "English-US.Female-Calm",
+        "English-US.Male-Calm",
+        "English-US.Female-Neutral",
+        "English-US.Male-Neutral",
+    ]
+    static let nvidiaTTSModels = [
+        "nvidia/magpie-tts-multilingual",
+        "magpie-tts-multilingual",
+    ]
 
     private let synthesizer = AVSpeechSynthesizer()
     private var audioPlayer: AVAudioPlayer?
@@ -117,6 +137,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         case .grok:
             let cloned = VoiceCloneService.loadLocal().map(\.id)
             return Self.grokVoices + cloned
+        case .nvidia: return Self.nvidiaVoices
         }
     }
 
@@ -142,6 +163,11 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         get { UserDefaults.standard.string(forKey: "grokAPIKey") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "grokAPIKey") }
     }
+    /// Shared with CloudPolisher.nvidiaKey (NIM polish + Magpie TTS).
+    static var nvidiaKey: String {
+        get { CloudPolisher.nvidiaKey }
+        set { CloudPolisher.nvidiaKey = newValue }
+    }
 
     func stop(clearText: Bool = true) {
         speakTask?.cancel()
@@ -164,7 +190,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
                 synthesizer.pauseSpeaking(at: .word)
                 state = .paused
             }
-        case .openai, .gemini, .grok:
+        case .openai, .gemini, .grok, .nvidia:
             audioPlayer?.pause()
             state = .paused
         }
@@ -175,7 +201,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         case .system:
             synthesizer.continueSpeaking()
             state = .playing
-        case .openai, .gemini, .grok:
+        case .openai, .gemini, .grok, .nvidia:
             audioPlayer?.play()
             state = .playing
         }
@@ -201,6 +227,7 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         openAIVoice = UserDefaults.standard.string(forKey: "flowReadOpenAIVoice") ?? openAIVoice
         geminiVoice = UserDefaults.standard.string(forKey: "flowReadGeminiVoice") ?? geminiVoice
         grokVoice = UserDefaults.standard.string(forKey: "flowReadGrokVoice") ?? grokVoice
+        nvidiaVoice = UserDefaults.standard.string(forKey: "flowReadNvidiaVoice") ?? nvidiaVoice
         if UserDefaults.standard.object(forKey: "flowReadAuto") != nil {
             autoReadEnabled = UserDefaults.standard.bool(forKey: "flowReadAuto")
         }
@@ -230,6 +257,8 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
             speakTask = Task { await speakGemini(cleaned) }
         case .grok:
             speakTask = Task { await speakGrok(cleaned) }
+        case .nvidia:
+            speakTask = Task { await speakNVIDIA(cleaned) }
         }
     }
 
@@ -308,6 +337,40 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         }
     }
 
+    func testNVIDIA(key: String) async {
+        nvidiaKeyStatus = .testing
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !k.isEmpty else {
+            nvidiaKeyStatus = .fail("Paste an NVIDIA / NGC API key first")
+            return
+        }
+        var req = URLRequest(url: URL(string: "\(CloudPolisher.nvidiaBaseURL)/models")!)
+        req.setValue("Bearer \(k)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 15
+        do {
+            let (_, res) = try await URLSession.shared.data(for: req)
+            guard let http = res as? HTTPURLResponse else {
+                nvidiaKeyStatus = .fail("No response")
+                return
+            }
+            // Some NIM keys return 200 with a list; others 404 on /models but still work for chat.
+            if (200...299).contains(http.statusCode) {
+                nvidiaKeyStatus = .ok("NVIDIA NIM connected")
+            } else if http.statusCode == 404 || http.statusCode == 401 || http.statusCode == 403 {
+                // Probe chat with a tiny completion
+                if await CloudPolisher.polishNVIDIA("ok", apiKey: k) != nil {
+                    nvidiaKeyStatus = .ok("NVIDIA NIM chat works")
+                } else {
+                    nvidiaKeyStatus = .fail("HTTP \(http.statusCode) — check NGC key at build.nvidia.com")
+                }
+            } else {
+                nvidiaKeyStatus = .fail("HTTP \(http.statusCode) — check key")
+            }
+        } catch {
+            nvidiaKeyStatus = .fail(error.localizedDescription)
+        }
+    }
+
     // MARK: - System
 
     private func speakSystem(_ text: String) {
@@ -322,6 +385,112 @@ final class FlowReader: NSObject, ObservableObject, AVSpeechSynthesizerDelegate 
         }
         synthesizer.speak(utterance)
         state = .playing
+    }
+
+    // MARK: - NVIDIA Magpie TTS (NIM)
+
+    private func speakNVIDIA(_ text: String) async {
+        let apiKey = Self.nvidiaKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            state = .error("Add an NVIDIA API key in Settings (build.nvidia.com)")
+            return
+        }
+        let voice = nvidiaVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+        activeVoiceName = "NVIDIA · \(voice)"
+
+        // 1) OpenAI-compatible /v1/audio/speech on integrate.api.nvidia.com
+        for model in Self.nvidiaTTSModels {
+            if let data = try? await nvidiaSpeechOpenAICompat(
+                text: text, apiKey: apiKey, model: model, voice: voice
+            ) {
+                do {
+                    try playAudioData(data)
+                    return
+                } catch { /* try next */ }
+            }
+        }
+        // 2) Magpie invoke-style body (text + voice)
+        if let data = try? await nvidiaMagpieInvoke(text: text, apiKey: apiKey, voice: voice) {
+            do {
+                try playAudioData(data)
+                return
+            } catch {
+                if !Task.isCancelled { state = .error(error.localizedDescription) }
+                return
+            }
+        }
+        if !Task.isCancelled {
+            state = .error("NVIDIA TTS failed — check NGC key and Magpie access on build.nvidia.com")
+        }
+    }
+
+    private func nvidiaSpeechOpenAICompat(
+        text: String, apiKey: String, model: String, voice: String
+    ) async throws -> Data? {
+        guard let url = URL(string: "\(CloudPolisher.nvidiaBaseURL)/audio/speech") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 90
+        let body: [String: Any] = [
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": "mp3",
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            return nil
+        }
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let b64 = obj["audio"] as? String
+                ?? obj["audio_base64"] as? String
+                ?? (obj["output"] as? [String: Any])?["audio"] as? String,
+               let decoded = Data(base64Encoded: b64) {
+                return decoded
+            }
+        }
+        return data.count > 64 ? data : nil
+    }
+
+    private func nvidiaMagpieInvoke(text: String, apiKey: String, voice: String) async throws -> Data? {
+        // Hosted Magpie endpoint variants used by build.nvidia.com
+        let urls = [
+            "https://integrate.api.nvidia.com/v1/audio/nvidia/magpie-tts-multilingual",
+            "https://ai.api.nvidia.com/v1/audio/nvidia/magpie-tts-multilingual",
+        ]
+        for urlStr in urls {
+            guard let url = URL(string: urlStr) else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 90
+            let body: [String: Any] = [
+                "text": text,
+                "voice": voice,
+                "quality": "high",
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                continue
+            }
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let b64 = obj["audio"] as? String
+                    ?? obj["audio_base64"] as? String
+                    ?? (obj["data"] as? [String: Any])?["audio"] as? String,
+                   let decoded = Data(base64Encoded: b64) {
+                    return decoded
+                }
+            }
+            if data.count > 64 { return data }
+        }
+        return nil
     }
 
     // MARK: - OpenAI

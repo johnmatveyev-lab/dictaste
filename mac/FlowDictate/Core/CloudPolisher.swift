@@ -1,6 +1,6 @@
 import Foundation
 
-/// Cloud AI polish: Free BYO OpenAI key, or Pro managed license via Dictaste API.
+/// Cloud AI polish: managed license, BYO NVIDIA NIM, and/or BYO OpenAI.
 enum CloudPolisher {
     /// Production API base. Override with UserDefaults key `apiBaseURL` for staging.
     static var apiBaseURL: URL {
@@ -12,10 +12,35 @@ enum CloudPolisher {
         return URL(string: "https://dictaste.vercel.app")!
     }
 
+    /// NVIDIA NIM OpenAI-compatible base (build.nvidia.com / NGC key).
+    static let nvidiaBaseURL = "https://integrate.api.nvidia.com/v1"
+
     static var openAIKey: String {
         get { UserDefaults.standard.string(forKey: "openAIAPIKey") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "openAIAPIKey") }
     }
+
+    /// NGC / NVIDIA API key for NIM chat (polish) + Magpie TTS.
+    static var nvidiaKey: String {
+        get { UserDefaults.standard.string(forKey: "nvidiaAPIKey") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "nvidiaAPIKey") }
+    }
+
+    static var nvidiaPolishModel: String {
+        get {
+            let v = UserDefaults.standard.string(forKey: "nvidiaPolishModel") ?? ""
+            return v.isEmpty ? "nvidia/nemotron-mini-4b-instruct" : v
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "nvidiaPolishModel") }
+    }
+
+    static let nvidiaPolishModels = [
+        "nvidia/nemotron-mini-4b-instruct",
+        "meta/llama-3.1-8b-instruct",
+        "meta/llama-3.1-70b-instruct",
+        "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "meta/llama-3.3-70b-instruct",
+    ]
 
     static var licenseKey: String {
         get { UserDefaults.standard.string(forKey: "proLicenseKey") ?? "" }
@@ -54,10 +79,14 @@ enum CloudPolisher {
     The first character of your output must be the first character of the result.
     """
 
-    /// Tries Pro managed API first (if license + prefer), else BYO OpenAI key.
+    /// Managed first (if preferred + licensed), then BYO NVIDIA NIM, then BYO OpenAI.
     static func polish(_ text: String) async -> String? {
         if preferManagedPro, !licenseKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if let result = await polishManaged(text) { return result }
+        }
+        let nim = nvidiaKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !nim.isEmpty {
+            if let result = await polishNVIDIA(text, apiKey: nim) { return result }
         }
         let key = openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !key.isEmpty {
@@ -115,15 +144,52 @@ enum CloudPolisher {
     }
 
     static func polishOpenAI(_ text: String, apiKey: String) async -> String? {
-        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else { return nil }
+        await polishChatCompletions(
+            text: text,
+            apiKey: apiKey,
+            baseURL: "https://api.openai.com/v1",
+            model: UserDefaults.standard.string(forKey: "openAIModel") ?? "gpt-4o-mini",
+            label: "OpenAI"
+        )
+    }
+
+    /// BYO NVIDIA NIM chat (OpenAI-compatible) for unlimited polish on your NGC key.
+    static func polishNVIDIA(_ text: String, apiKey: String) async -> String? {
+        let primary = nvidiaPolishModel
+        let cascade = [primary] + nvidiaPolishModels.filter { $0 != primary }
+        for model in cascade {
+            if let result = await polishChatCompletions(
+                text: text,
+                apiKey: apiKey,
+                baseURL: nvidiaBaseURL,
+                model: model,
+                label: "NVIDIA NIM"
+            ) {
+                return result
+            }
+        }
+        return nil
+    }
+
+    private static func polishChatCompletions(
+        text: String,
+        apiKey: String,
+        baseURL: String,
+        model: String,
+        label: String
+    ) async -> String? {
+        guard let url = URL(string: "\(baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/chat/completions") else {
+            return nil
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 20
+        request.timeoutInterval = 45
         let body: [String: Any] = [
-            "model": UserDefaults.standard.string(forKey: "openAIModel") ?? "gpt-4o-mini",
+            "model": model,
             "temperature": 0.3,
+            "max_tokens": min(4096, max(256, text.count / 2 + 200)),
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": "Raw transcript:\n\(text)"],
@@ -133,7 +199,7 @@ enum CloudPolisher {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                NSLog("Dictaste: OpenAI polish failed")
+                NSLog("Dictaste: \(label) polish failed model=\(model)")
                 return nil
             }
             guard
@@ -144,7 +210,7 @@ enum CloudPolisher {
             else { return nil }
             return sanity(stripPreamble(content.trimmingCharacters(in: .whitespacesAndNewlines)), original: text)
         } catch {
-            NSLog("Dictaste: OpenAI polish error \(error.localizedDescription)")
+            NSLog("Dictaste: \(label) polish error \(error.localizedDescription)")
             return nil
         }
     }

@@ -6,6 +6,8 @@ struct AccountView: View {
     @State private var openAIKey = FlowReader.openAIKey
     @State private var geminiKey = FlowReader.geminiKey
     @State private var grokKey = FlowReader.grokKey
+    @State private var nvidiaKey = CloudPolisher.nvidiaKey
+    @State private var nvidiaPolishModel = CloudPolisher.nvidiaPolishModel
     @State private var preferManaged = CloudPolisher.preferManagedPro
     @State private var saved = false
     @State private var refreshing = false
@@ -24,13 +26,15 @@ struct AccountView: View {
     @State private var openAIVoice = UserDefaults.standard.string(forKey: "flowReadOpenAIVoice") ?? "nova"
     @State private var geminiVoice = UserDefaults.standard.string(forKey: "flowReadGeminiVoice") ?? "Kore"
     @State private var grokVoice = UserDefaults.standard.string(forKey: "flowReadGrokVoice") ?? "Ara"
+    @State private var nvidiaVoice = UserDefaults.standard.string(forKey: "flowReadNvidiaVoice") ?? "English-US.Female-1"
     @State private var autoRead: Bool = {
-        if UserDefaults.standard.object(forKey: "flowReadAuto") == nil { return true }
+        if UserDefaults.standard.object(forKey: "flowReadAuto") == nil { return false }
         return UserDefaults.standard.bool(forKey: "flowReadAuto")
     }()
     @State private var tester = FlowReader()
     @State private var showVoiceClone = false
     @State private var clonedVoices: [ClonedVoice] = VoiceCloneService.loadLocal()
+    @State private var confirmReset = false
 
     private var systemVoices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices()
@@ -41,7 +45,7 @@ struct AccountView: View {
     var body: some View {
         Form {
             Section {
-                Text("Drag to highlight text anywhere — reading starts when you release the mouse. Space = pause/play · Esc = stop. No copy/paste needed.")
+                Text("Drag to highlight text anywhere — a Read button appears near the cursor. Click Read to speak. Pause / Stop stay on the chip. Space = pause · Esc = cancel.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -93,7 +97,7 @@ struct AccountView: View {
             }
 
             Section("Highlight-to-speak") {
-                Toggle("Auto-read when text is selected", isOn: $autoRead)
+                Toggle("Start immediately (skip Read button)", isOn: $autoRead)
                 Picker("Provider", selection: $provider) {
                     ForEach(FlowReader.Provider.allCases) { p in
                         Text(p.label).tag(p)
@@ -129,6 +133,23 @@ struct AccountView: View {
                 }
             }
 
+            Section("NVIDIA (NIM) — polish + Magpie voice") {
+                SecureField("nvapi-… / NGC key", text: $nvidiaKey)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Polish model", selection: $nvidiaPolishModel) {
+                    ForEach(CloudPolisher.nvidiaPolishModels, id: \.self) { m in
+                        Text(m).tag(m)
+                    }
+                }
+                Text("Free API key at build.nvidia.com · used for AI polish and NVIDIA Magpie highlight-to-speak.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                keyTestRow(status: tester.nvidiaKeyStatus) {
+                    Task { await tester.testNVIDIA(key: nvidiaKey) }
+                }
+            }
+
             Section("OpenAI API key") {
                 SecureField("sk-…", text: $openAIKey)
                     .textFieldStyle(.roundedBorder)
@@ -154,12 +175,20 @@ struct AccountView: View {
             }
 
             Section {
+                Text("API keys and license stay on this Mac only. Dictaste never uploads them to our servers. New installs start with clean defaults.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 HStack {
                     Button("Save") { saveAll() }
                         .keyboardShortcut(.defaultAction)
                     Button("Save & test all keys") {
                         saveAll()
                         Task {
+                            await tester.testNVIDIA(key: nvidiaKey)
                             await tester.testOpenAI(key: openAIKey)
                             await tester.testGemini(key: geminiKey)
                             await tester.testGrok(key: grokKey)
@@ -172,10 +201,25 @@ struct AccountView: View {
                         .foregroundStyle(.green)
                 }
             }
+
+            Section("Privacy") {
+                Button("Reset all settings & keys…", role: .destructive) {
+                    confirmReset = true
+                }
+                Text("Clears license, API keys, voices, and options on this Mac. Does not change your website account.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .alert("Reset all settings?", isPresented: $confirmReset) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) { resetAllLocalSettings() }
+        } message: {
+            Text("This removes API keys, license, and preferences stored on this Mac only.")
         }
         .formStyle(.grouped)
         .padding()
-        .frame(width: 520, height: 760)
+        .frame(width: 520, height: 820)
         .task {
             await usage.refreshFromServer()
             clonedVoices = VoiceCloneService.loadLocal()
@@ -238,6 +282,14 @@ struct AccountView: View {
             }
             Text("Built-in voices or your cloned voice_id. Requires an xAI API key.")
                 .font(.caption).foregroundStyle(.secondary)
+        case .nvidia:
+            Picker("NVIDIA Magpie voice", selection: $nvidiaVoice) {
+                ForEach(FlowReader.nvidiaVoices, id: \.self) { v in
+                    Text(v).tag(v)
+                }
+            }
+            Text("Uses your NVIDIA NIM key (Magpie TTS). Free key at build.nvidia.com.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -269,9 +321,12 @@ struct AccountView: View {
         CloudPolisher.licenseKey = licenseKey.trimmingCharacters(in: .whitespacesAndNewlines)
         CloudPolisher.preferManagedPro = preferManaged
         CloudPolisher.openAIKey = openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        CloudPolisher.nvidiaKey = nvidiaKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        CloudPolisher.nvidiaPolishModel = nvidiaPolishModel
         FlowReader.openAIKey = openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         FlowReader.geminiKey = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         FlowReader.grokKey = grokKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        FlowReader.nvidiaKey = nvidiaKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
         UserDefaults.standard.set(provider.rawValue, forKey: "flowReadProvider")
         UserDefaults.standard.set(rate, forKey: "flowReadRate")
@@ -279,8 +334,51 @@ struct AccountView: View {
         UserDefaults.standard.set(openAIVoice, forKey: "flowReadOpenAIVoice")
         UserDefaults.standard.set(geminiVoice, forKey: "flowReadGeminiVoice")
         UserDefaults.standard.set(grokVoice, forKey: "flowReadGrokVoice")
+        UserDefaults.standard.set(nvidiaVoice, forKey: "flowReadNvidiaVoice")
         UserDefaults.standard.set(autoRead, forKey: "flowReadAuto")
         saved = true
         Task { await usage.refreshFromServer() }
+    }
+
+    /// Wipe local secrets + prefs so this Mac matches a fresh install.
+    private func resetAllLocalSettings() {
+        let keys = [
+            "proLicenseKey", "openAIAPIKey", "geminiAPIKey", "grokAPIKey", "nvidiaAPIKey",
+            "nvidiaPolishModel", "preferManagedPro", "apiBaseURL", "openAIModel",
+            "flowReadProvider", "flowReadRate", "flowReadSystemVoice",
+            "flowReadOpenAIVoice", "flowReadGeminiVoice", "flowReadGrokVoice",
+            "flowReadNvidiaVoice", "flowReadAuto", "flowReadPromptV2",
+            "optionTapEnabled", "polishEnabled", "dictationHistory",
+            "readPromptPosX", "readPromptPosY",
+        ]
+        for k in keys {
+            UserDefaults.standard.removeObject(forKey: k)
+        }
+        CloudPolisher.licenseKey = ""
+        CloudPolisher.openAIKey = ""
+        CloudPolisher.nvidiaKey = ""
+        CloudPolisher.preferManagedPro = true
+        FlowReader.openAIKey = ""
+        FlowReader.geminiKey = ""
+        FlowReader.grokKey = ""
+        FlowReader.nvidiaKey = ""
+
+        licenseKey = ""
+        openAIKey = ""
+        geminiKey = ""
+        grokKey = ""
+        nvidiaKey = ""
+        nvidiaPolishModel = CloudPolisher.nvidiaPolishModels[0]
+        preferManaged = true
+        provider = .system
+        rate = 1.0
+        systemVoiceId = ""
+        openAIVoice = "nova"
+        geminiVoice = "Kore"
+        grokVoice = "Ara"
+        nvidiaVoice = "English-US.Female-1"
+        autoRead = false
+        saved = true
+        confirmReset = false
     }
 }
