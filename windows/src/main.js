@@ -7509,6 +7509,128 @@ function sequenceLast(kind = "number") {
 }
 
 /**
+ * Swap last transcript sides (delimiter columns · first/last words · first/last lines).
+ * @param {"colon"|"equals"|"pipe"|"comma"|"arrow"|"words"|"first-last-line"} kind
+ */
+function swapText(raw, kind = "colon") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "colon");
+
+  const splitKeepEnd = () => {
+    const ends = /\r\n$/.test(t) ? "\r\n" : /\n$/.test(t) ? "\n" : /\r$/.test(t) ? "\r" : "";
+    const body = ends ? t.slice(0, -ends.length) : t;
+    const nl = body.includes("\r\n") ? "\r\n" : body.includes("\r") ? "\r" : "\n";
+    return { lines: body.split(/\r\n|\r|\n/), nl, ends };
+  };
+
+  const mapLines = (fn) => {
+    const { lines, nl, ends } = splitKeepEnd();
+    return lines.map(fn).join(nl) + ends;
+  };
+
+  const swapOn = (line, seps) => {
+    let searchFrom = 0;
+    if (seps.includes(":")) {
+      const scheme = line.match(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//);
+      if (scheme) searchFrom = scheme[0].length;
+    }
+    let best = -1;
+    let sep = null;
+    for (const s of seps) {
+      const i = line.indexOf(s, searchFrom);
+      if (i >= 0 && (best < 0 || i < best || (i === best && s.length > String(sep || "").length))) {
+        best = i;
+        sep = s;
+      }
+    }
+    if (best < 0 || !sep) return line;
+    const left = line.slice(0, best);
+    const right = line.slice(best + sep.length);
+    const leftTrail = (left.match(/\s*$/) || [""])[0];
+    const rightLead = (right.match(/^\s*/) || [""])[0];
+    const l = left.slice(0, left.length - leftTrail.length);
+    const r = right.slice(rightLead.length);
+    if (!l.length && !r.length) return line;
+    return r + leftTrail + sep + rightLead + l;
+  };
+
+  switch (k) {
+    case "equals":
+      return mapLines((l) => swapOn(l, ["="]));
+    case "pipe":
+      return mapLines((l) => swapOn(l, ["|"]));
+    case "comma":
+      return mapLines((l) => swapOn(l, [","]));
+    case "arrow":
+      return mapLines((l) => swapOn(l, ["=>", "->", "→"]));
+    case "words":
+      return mapLines((line) => {
+        const m = line.match(/^(\s*)(.*?)(\s*)$/);
+        if (!m) return line;
+        const parts = m[2].split(/(\s+)/);
+        const wordIdx = [];
+        for (let i = 0; i < parts.length; i += 1) {
+          if (parts[i] && !/^\s+$/.test(parts[i])) wordIdx.push(i);
+        }
+        if (wordIdx.length < 2) return line;
+        const a = wordIdx[0];
+        const b = wordIdx[wordIdx.length - 1];
+        const tmp = parts[a];
+        parts[a] = parts[b];
+        parts[b] = tmp;
+        return m[1] + parts.join("") + m[3];
+      });
+    case "first-last-line": {
+      const { lines, nl, ends } = splitKeepEnd();
+      if (lines.length < 2) return t;
+      const tmp = lines[0];
+      lines[0] = lines[lines.length - 1];
+      lines[lines.length - 1] = tmp;
+      return lines.join(nl) + ends;
+    }
+    case "colon":
+    default:
+      return mapLines((l) => swapOn(l, [":"]));
+  }
+}
+
+function swapLast(kind = "colon") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to swap", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = swapText(src, kind);
+  if (text === src) {
+    notify("Swap made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
  */
