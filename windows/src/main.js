@@ -54,6 +54,8 @@
  * - Table last (md/csv/tsv · align · transpose · key:value pairs)
  * - Case last (snake · camel · pascal · kebab · CONST · words)
  * - Comment last (// # block/HTML · strip · toggle)
+ * - Timestamp last (ISO/local · per-line · strip)
+ * - Quote last (double/single/backtick/smart · unwrap · toggle)
  */
 const {
   app,
@@ -6690,6 +6692,257 @@ function commentLast(kind = "line-slash") {
 
 
 /**
+ * Timestamp / date-prefix transforms on last transcript.
+ * @param {"iso-prefix"|"iso-suffix"|"local-prefix"|"local-suffix"|"date-prefix"|"time-prefix"|"lines-iso"|"lines-local"|"lines-time"|"header-iso"|"strip-leading"} kind
+ */
+function timestampText(raw, kind = "iso-prefix") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "iso-prefix");
+  const endsWithNl = /\r?\n$/.test(t);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = now.toISOString();
+  const local =
+    now.getFullYear() +
+    "-" +
+    pad(now.getMonth() + 1) +
+    "-" +
+    pad(now.getDate()) +
+    " " +
+    pad(now.getHours()) +
+    ":" +
+    pad(now.getMinutes()) +
+    ":" +
+    pad(now.getSeconds());
+  const dateOnly =
+    now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+  const timeOnly =
+    pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+
+  const lines = t.split(/\r\n|\r|\n/);
+  const mapNonEmpty = (fn) => {
+    const out = lines.map((l) => {
+      if (!l.trim()) return l;
+      return fn(l);
+    });
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  const stripLeadingTs = (l) => {
+    // ISO-ish or local date/time prefixes
+    return l
+      .replace(
+        /^\s*\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})?\]?\s*[-–—:]?\s*/,
+        ""
+      )
+      .replace(/^\s*\[?\d{2}:\d{2}(:\d{2})?\]?\s*[-–—:]?\s*/, "")
+      .replace(/^\s*\[?\d{4}-\d{2}-\d{2}\]?\s*[-–—:]?\s*/, "");
+  };
+
+  switch (k) {
+    case "iso-suffix":
+      return t.replace(/\s+$/, "") + " (" + iso + ")" + (endsWithNl ? "\n" : "");
+    case "local-prefix":
+      return "[" + local + "] " + t.replace(/^\s+/, "");
+    case "local-suffix":
+      return t.replace(/\s+$/, "") + " (" + local + ")" + (endsWithNl ? "\n" : "");
+    case "date-prefix":
+      return "[" + dateOnly + "] " + t.replace(/^\s+/, "");
+    case "time-prefix":
+      return "[" + timeOnly + "] " + t.replace(/^\s+/, "");
+    case "lines-iso":
+      return mapNonEmpty((l) => "[" + iso + "] " + l.trimStart());
+    case "lines-local":
+      return mapNonEmpty((l) => "[" + local + "] " + l.trimStart());
+    case "lines-time":
+      return mapNonEmpty((l) => "[" + timeOnly + "] " + l.trimStart());
+    case "header-iso": {
+      const body = t.replace(/^\s+/, "");
+      if (body.startsWith("---\n") || /^\[\d{4}-\d{2}-\d{2}T/.test(body)) {
+        return iso + "\n" + body;
+      }
+      return iso + "\n" + body;
+    }
+    case "strip-leading":
+      return mapNonEmpty((l) => stripLeadingTs(l));
+    case "iso-prefix":
+    default:
+      return "[" + iso + "] " + t.replace(/^\s+/, "");
+  }
+}
+
+/**
+ * Timestamp-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function timestampLast(kind = "iso-prefix") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to timestamp", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = timestampText(src, kind);
+  if (text === src) {
+    notify("Timestamp made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
+ * Quote / unwrap last transcript lines.
+ * @param {"double"|"single"|"backtick"|"smart"|"parens"|"brackets"|"braces"|"unwrap"|"toggle-double"|"csv"} kind
+ */
+function quoteText(raw, kind = "double") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "double");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const mapLines = (fn) => {
+    const out = lines.map(fn);
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+  const pairs = [
+    ['"', '"'],
+    ["'", "'"],
+    ["`", "`"],
+    ["“", "”"],
+    ["‘", "’"],
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ];
+  const unwrapOne = (s) => {
+    const body = String(s || "");
+    const trimmed = body.trim();
+    if (trimmed.length < 2) return body;
+    for (const [a, b] of pairs) {
+      if (trimmed.startsWith(a) && trimmed.endsWith(b)) {
+        const lead = (body.match(/^\s*/) || [""])[0];
+        const inner = trimmed.slice(a.length, trimmed.length - b.length);
+        return lead + inner;
+      }
+    }
+    return body;
+  };
+  const wrap = (open, close) =>
+    mapLines((l) => {
+      if (!l.trim()) return l;
+      const lead = (l.match(/^\s*/) || [""])[0];
+      const body = l.slice(lead.length);
+      if (body.startsWith(open) && body.endsWith(close)) return l;
+      return lead + open + body + close;
+    });
+
+  switch (k) {
+    case "single":
+      return wrap("'", "'");
+    case "backtick":
+      return wrap("`", "`");
+    case "smart":
+      return wrap("“", "”");
+    case "parens":
+      return wrap("(", ")");
+    case "brackets":
+      return wrap("[", "]");
+    case "braces":
+      return wrap("{", "}");
+    case "unwrap":
+      return mapLines((l) => (l.trim() ? unwrapOne(l) : l));
+    case "toggle-double":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        const body = l.slice(lead.length);
+        if (body.startsWith('"') && body.endsWith('"') && body.length >= 2) {
+          return lead + body.slice(1, -1);
+        }
+        return lead + '"' + body + '"';
+      });
+    case "csv":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        const body = l.slice(lead.length);
+        return lead + '"' + body.replace(/"/g, '""') + '"';
+      });
+    case "double":
+    default:
+      return wrap('"', '"');
+  }
+}
+
+/**
+ * Quote-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function quoteLast(kind = "double") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to quote", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = quoteText(src, kind);
+  if (text === src) {
+    notify("Quote made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -8383,6 +8636,39 @@ function rebuildTrayMenu() {
         { label: "Strip comments", click: () => commentLast("strip") },
       ],
     },
+    {
+      label: "Timestamp last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "ISO prefix", click: () => timestampLast("iso-prefix") },
+        { label: "ISO suffix", click: () => timestampLast("iso-suffix") },
+        { label: "Local prefix", click: () => timestampLast("local-prefix") },
+        { label: "Local suffix", click: () => timestampLast("local-suffix") },
+        { label: "Date prefix", click: () => timestampLast("date-prefix") },
+        { label: "Time prefix", click: () => timestampLast("time-prefix") },
+        { label: "Per-line ISO", click: () => timestampLast("lines-iso") },
+        { label: "Per-line local", click: () => timestampLast("lines-local") },
+        { label: "Per-line time", click: () => timestampLast("lines-time") },
+        { label: "ISO header line", click: () => timestampLast("header-iso") },
+        { label: "Strip leading timestamps", click: () => timestampLast("strip-leading") },
+      ],
+    },
+    {
+      label: "Quote last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: 'Wrap "double"', click: () => quoteLast("double") },
+        { label: "Wrap 'single'", click: () => quoteLast("single") },
+        { label: "Wrap `backtick`", click: () => quoteLast("backtick") },
+        { label: "Wrap “smart”", click: () => quoteLast("smart") },
+        { label: "Wrap (parens)", click: () => quoteLast("parens") },
+        { label: "Wrap [brackets]", click: () => quoteLast("brackets") },
+        { label: "Wrap {braces}", click: () => quoteLast("braces") },
+        { label: 'Toggle "', click: () => quoteLast("toggle-double") },
+        { label: "CSV-escape quotes", click: () => quoteLast("csv") },
+        { label: "Unwrap", click: () => quoteLast("unwrap") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -8949,7 +9235,7 @@ app.whenReady().then(() => {
       source: src,
     };
   });
-    ipcMain.handle("comment-last", (_e, kind) =>
+  ipcMain.handle("comment-last", (_e, kind) =>
     commentLast(String(kind || "line-slash"))
   );
   ipcMain.handle("comment-preview", (_e, kind) => {
@@ -8959,6 +9245,32 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "line-slash"),
       text: commentText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("quote-last", (_e, kind) =>
+    quoteLast(String(kind || "double"))
+  );
+  ipcMain.handle("quote-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "double"),
+      text: quoteText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("timestamp-last", (_e, kind) =>
+    timestampLast(String(kind || "iso-prefix"))
+  );
+  ipcMain.handle("timestamp-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "iso-prefix"),
+      text: timestampText(src, kind),
       source: src,
     };
   });

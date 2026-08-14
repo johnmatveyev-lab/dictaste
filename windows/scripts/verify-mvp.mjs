@@ -767,6 +767,24 @@ else fail("settings missing comment last");
 if (/commentLast|commentPreview/.test(preload))
   pass("preload comment last");
 else fail("preload missing comment last");
+if (/timestampLast|timestampText|Timestamp last/.test(main))
+  pass("main timestamp last");
+else fail("main missing timestamp last");
+if (/id="tsIsoPrefix"|timestampLast|Timestamp last/i.test(settings))
+  pass("settings timestamp last");
+else fail("settings missing timestamp last");
+if (/timestampLast|timestampPreview/.test(preload))
+  pass("preload timestamp last");
+else fail("preload missing timestamp last");
+if (/quoteLast|quoteText|Quote last/.test(main))
+  pass("main quote last");
+else fail("main missing quote last");
+if (/id="qtDouble"|quoteLast|Quote last/i.test(settings))
+  pass("settings quote last");
+else fail("settings missing quote last");
+if (/quoteLast|quotePreview/.test(preload))
+  pass("preload quote last");
+else fail("preload missing quote last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

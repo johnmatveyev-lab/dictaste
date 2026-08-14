@@ -515,6 +515,35 @@
     <button type="button" id="cmStrip" class="ghost">Strip</button>
   </div>
 
+  <label>Timestamp last <span style="font-weight:400;color:var(--muted)">(ISO/local · per-line · strip · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="tsIsoPrefix" class="ghost">ISO prefix</button>
+    <button type="button" id="tsIsoSuffix" class="ghost">ISO suffix</button>
+    <button type="button" id="tsLocalPrefix" class="ghost">Local prefix</button>
+    <button type="button" id="tsLocalSuffix" class="ghost">Local suffix</button>
+    <button type="button" id="tsDate" class="ghost">Date</button>
+    <button type="button" id="tsTime" class="ghost">Time</button>
+    <button type="button" id="tsLinesIso" class="ghost">Lines ISO</button>
+    <button type="button" id="tsLinesLocal" class="ghost">Lines local</button>
+    <button type="button" id="tsLinesTime" class="ghost">Lines time</button>
+    <button type="button" id="tsHeader" class="ghost">ISO header</button>
+    <button type="button" id="tsStrip" class="ghost">Strip leading</button>
+  </div>
+
+  <label>Quote last <span style="font-weight:400;color:var(--muted)">(double/single/backtick/smart · unwrap · toggle · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="qtDouble" class="ghost">"double"</button>
+    <button type="button" id="qtSingle" class="ghost">'single'</button>
+    <button type="button" id="qtTick" class="ghost">`tick`</button>
+    <button type="button" id="qtSmart" class="ghost">“smart”</button>
+    <button type="button" id="qtParens" class="ghost">(parens)</button>
+    <button type="button" id="qtBrackets" class="ghost">[brackets]</button>
+    <button type="button" id="qtBraces" class="ghost">{braces}</button>
+    <button type="button" id="qtToggle" class="ghost">Toggle "</button>
+    <button type="button" id="qtCsv" class="ghost">CSV</button>
+    <button type="button" id="qtUnwrap" class="ghost">Unwrap</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1880,6 +1909,39 @@
     document.getElementById('cmToggleSlash').onclick = () => commentNow('toggle-slash');
     document.getElementById('cmToggleHash').onclick = () => commentNow('toggle-hash');
     document.getElementById('cmStrip').onclick = () => commentNow('strip');
+    async function timestampNow(kind) {
+      const r = await window.dictaste.timestampLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Timestamp: no changes' : ('Timestamp · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Timestamp failed');
+    }
+    document.getElementById('tsIsoPrefix').onclick = () => timestampNow('iso-prefix');
+    document.getElementById('tsIsoSuffix').onclick = () => timestampNow('iso-suffix');
+    document.getElementById('tsLocalPrefix').onclick = () => timestampNow('local-prefix');
+    document.getElementById('tsLocalSuffix').onclick = () => timestampNow('local-suffix');
+    document.getElementById('tsDate').onclick = () => timestampNow('date-prefix');
+    document.getElementById('tsTime').onclick = () => timestampNow('time-prefix');
+    document.getElementById('tsLinesIso').onclick = () => timestampNow('lines-iso');
+    document.getElementById('tsLinesLocal').onclick = () => timestampNow('lines-local');
+    document.getElementById('tsLinesTime').onclick = () => timestampNow('lines-time');
+    document.getElementById('tsHeader').onclick = () => timestampNow('header-iso');
+    document.getElementById('tsStrip').onclick = () => timestampNow('strip-leading');
+    async function quoteNow(kind) {
+      const r = await window.dictaste.quoteLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Quote: no changes' : ('Quote · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Quote failed');
+    }
+    document.getElementById('qtDouble').onclick = () => quoteNow('double');
+    document.getElementById('qtSingle').onclick = () => quoteNow('single');
+    document.getElementById('qtTick').onclick = () => quoteNow('backtick');
+    document.getElementById('qtSmart').onclick = () => quoteNow('smart');
+    document.getElementById('qtParens').onclick = () => quoteNow('parens');
+    document.getElementById('qtBrackets').onclick = () => quoteNow('brackets');
+    document.getElementById('qtBraces').onclick = () => quoteNow('braces');
+    document.getElementById('qtToggle').onclick = () => quoteNow('toggle-double');
+    document.getElementById('qtCsv').onclick = () => quoteNow('csv');
+    document.getElementById('qtUnwrap').onclick = () => quoteNow('unwrap');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
