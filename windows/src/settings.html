@@ -442,6 +442,24 @@
     <button type="button" id="clProgress" class="ghost">Progress</button>
   </div>
 
+  <label>Markdown last <span style="font-weight:400;color:var(--muted)">(strip · bold/italic · code · headers · links · escape · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="mdStrip" class="ghost">Strip MD</button>
+    <button type="button" id="mdBold" class="ghost">Bold</button>
+    <button type="button" id="mdItalic" class="ghost">Italic</button>
+    <button type="button" id="mdStrike" class="ghost">Strike</button>
+    <button type="button" id="mdCode" class="ghost">Inline code</button>
+    <button type="button" id="mdFence" class="ghost">Code fence</button>
+    <button type="button" id="mdH1" class="ghost">H1</button>
+    <button type="button" id="mdH2" class="ghost">H2</button>
+    <button type="button" id="mdH3" class="ghost">H3</button>
+    <button type="button" id="mdBq" class="ghost">Blockquote</button>
+    <button type="button" id="mdLinkStrip" class="ghost">Strip links</button>
+    <button type="button" id="mdLinkUrls" class="ghost">Autolink</button>
+    <button type="button" id="mdHr" class="ghost">HR before</button>
+    <button type="button" id="mdEscape" class="ghost">Escape</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1724,6 +1742,26 @@
     document.getElementById('clBulletsTasks').onclick = () => checklistNow('bullets-to-tasks');
     document.getElementById('clTasksBullets').onclick = () => checklistNow('tasks-to-bullets');
     document.getElementById('clProgress').onclick = () => checklistNow('progress');
+    async function markdownNow(kind) {
+      const r = await window.dictaste.markdownLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Markdown: no changes' : ('Markdown · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Markdown failed');
+    }
+    document.getElementById('mdStrip').onclick = () => markdownNow('strip');
+    document.getElementById('mdBold').onclick = () => markdownNow('bold');
+    document.getElementById('mdItalic').onclick = () => markdownNow('italic');
+    document.getElementById('mdStrike').onclick = () => markdownNow('strike');
+    document.getElementById('mdCode').onclick = () => markdownNow('code-inline');
+    document.getElementById('mdFence').onclick = () => markdownNow('code-fence');
+    document.getElementById('mdH1').onclick = () => markdownNow('h1');
+    document.getElementById('mdH2').onclick = () => markdownNow('h2');
+    document.getElementById('mdH3').onclick = () => markdownNow('h3');
+    document.getElementById('mdBq').onclick = () => markdownNow('blockquote-md');
+    document.getElementById('mdLinkStrip').onclick = () => markdownNow('link-strip');
+    document.getElementById('mdLinkUrls').onclick = () => markdownNow('link-urls');
+    document.getElementById('mdHr').onclick = () => markdownNow('hr-before');
+    document.getElementById('mdEscape').onclick = () => markdownNow('escape');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

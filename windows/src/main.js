@@ -49,6 +49,7 @@
  * - Indent last (indent/outdent · tabs↔spaces · strip common · blockquote)
  * - Reverse last (lines · words · chars · words/line · sentences)
  * - Checklist last (markdown tasks · toggle · strip · numbered)
+ * - Markdown last (strip · bold/italic · code · headers · links)
  */
 const {
   app,
@@ -5842,6 +5843,182 @@ function checklistLast(kind = "unchecked") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+
+/**
+ * Markdown-oriented transforms on last transcript.
+ * @param {"strip"|"bold"|"italic"|"strike"|"code-inline"|"code-fence"|"h1"|"h2"|"h3"|"blockquote-md"|"link-strip"|"link-urls"|"hr-before"|"escape"} kind
+ */
+function markdownText(raw, kind = "strip") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "strip");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const mapLines = (fn) => {
+    const out = lines.map(fn);
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+  const wrapNonEmpty = (open, close) => {
+    const body = t.trim();
+    if (!body) return t;
+    // avoid double-wrap if already
+    if (body.startsWith(open) && body.endsWith(close)) return t;
+    return open + body + close;
+  };
+
+  switch (k) {
+    case "bold":
+      return wrapNonEmpty("**", "**");
+    case "italic":
+      return wrapNonEmpty("*", "*");
+    case "strike":
+      return wrapNonEmpty("~~", "~~");
+    case "code-inline": {
+      const body = t.trim();
+      if (!body) return t;
+      if (body.startsWith("`") && body.endsWith("`")) return t;
+      return "`" + body.replace(/`/g, "'") + "`";
+    }
+    case "code-fence": {
+      const body = t.replace(/\s+$/, "");
+      if (/^```[\s\S]*```$/.test(body.trim())) return t;
+      return "```\n" + body + "\n```" + (endsWithNl ? "\n" : "");
+    }
+    case "h1":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const s = l.replace(/^\s{0,3}#{1,6}\s+/, "");
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "# " + s.trimStart();
+      });
+    case "h2":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const s = l.replace(/^\s{0,3}#{1,6}\s+/, "");
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "## " + s.trimStart();
+      });
+    case "h3":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const s = l.replace(/^\s{0,3}#{1,6}\s+/, "");
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "### " + s.trimStart();
+      });
+    case "blockquote-md":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s{0,3}>/.test(l)) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "> " + l.trimStart();
+      });
+    case "link-strip": {
+      // [text](url) -> text ; bare <url> -> url ; ![alt](url) -> alt
+      let s = t;
+      s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1");
+      s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+      s = s.replace(/<((?:https?:\/\/)[^>]+)>/gi, "$1");
+      return s;
+    }
+    case "link-urls": {
+      // Autolink bare URLs as [url](url) when not already in markdown link
+      return t.replace(
+        /(?<!\]\()(?<!\[)(https?:\/\/[^\s<>"')\]]+)/gi,
+        "[$1]($1)"
+      );
+    }
+    case "hr-before": {
+      const body = t.replace(/^\s+/, "");
+      if (body.startsWith("---\n") || body.startsWith("***\n")) return t;
+      return "---\n" + t;
+    }
+    case "escape": {
+      // Escape markdown special chars for plain paste
+      return t.replace(/([\\`*_{}\[\]()#+\-.!|>])/g, "\\$1");
+    }
+    case "strip":
+    default: {
+      let s = t;
+      // code fences
+      s = s.replace(/```[\w]*\n?([\s\S]*?)```/g, "$1");
+      // images / links
+      s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1");
+      s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+      s = s.replace(/<((?:https?:\/\/)[^>]+)>/gi, "$1");
+      // bold/italic/strike/code
+      s = s.replace(/\*\*\*([^*]+)\*\*\*/g, "$1");
+      s = s.replace(/___([^_]+)___/g, "$1");
+      s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
+      s = s.replace(/__([^_]+)__/g, "$1");
+      s = s.replace(/~~([^~]+)~~/g, "$1");
+      s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "$1");
+      s = s.replace(/(?<!_)_([^_]+)_(?!_)/g, "$1");
+      s = s.replace(/`([^`]+)`/g, "$1");
+      // headings / blockquote / hr / task / bullets markers light
+      s = s
+        .split(/\r\n|\r|\n/)
+        .map((l) => {
+          let x = l;
+          x = x.replace(/^\s{0,3}#{1,6}\s+/, "");
+          x = x.replace(/^\s{0,3}>\s?/, "");
+          x = x.replace(/^\s*[-*+]\s+\[[ xX]\]\s+/, "");
+          x = x.replace(/^\s*[-*+]\s+/, "");
+          x = x.replace(/^\s*\d+\.\s+/, "");
+          if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(x)) return "";
+          return x;
+        })
+        .join("\n");
+      // unescape common
+      s = s.replace(/\\([\\`*_{}\[\]()#+\-.!|>])/g, "$1");
+      if (endsWithNl && !s.endsWith("\n")) s += "\n";
+      return s;
+    }
+  }
+}
+
+/**
+ * Markdown-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function markdownLast(kind = "strip") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for markdown", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = markdownText(src, kind);
+  if (text === src) {
+    notify("Markdown made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -7453,6 +7630,26 @@ function rebuildTrayMenu() {
         { label: "Progress summary", click: () => checklistLast("progress") },
       ],
     },
+    {
+      label: "Markdown last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Strip markdown", click: () => markdownLast("strip") },
+        { label: "Bold **…**", click: () => markdownLast("bold") },
+        { label: "Italic *…*", click: () => markdownLast("italic") },
+        { label: "Strikethrough ~~…~~", click: () => markdownLast("strike") },
+        { label: "Inline code", click: () => markdownLast("code-inline") },
+        { label: "Code fence", click: () => markdownLast("code-fence") },
+        { label: "Heading H1", click: () => markdownLast("h1") },
+        { label: "Heading H2", click: () => markdownLast("h2") },
+        { label: "Heading H3", click: () => markdownLast("h3") },
+        { label: "Blockquote", click: () => markdownLast("blockquote-md") },
+        { label: "Strip links (keep text)", click: () => markdownLast("link-strip") },
+        { label: "Autolink URLs", click: () => markdownLast("link-urls") },
+        { label: "HR before", click: () => markdownLast("hr-before") },
+        { label: "Escape specials", click: () => markdownLast("escape") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7964,6 +8161,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "unchecked"),
       text: checklistText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("markdown-last", (_e, kind) =>
+    markdownLast(String(kind || "strip"))
+  );
+  ipcMain.handle("markdown-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "strip"),
+      text: markdownText(src, kind),
       source: src,
     };
   });

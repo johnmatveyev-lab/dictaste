@@ -722,6 +722,15 @@ else fail("settings missing checklist last");
 if (/checklistLast|checklistPreview/.test(preload))
   pass("preload checklist last");
 else fail("preload missing checklist last");
+if (/markdownLast|markdownText|Markdown last/.test(main))
+  pass("main markdown last");
+else fail("main missing markdown last");
+if (/id="mdStrip"|markdownLast|Markdown last/i.test(settings))
+  pass("settings markdown last");
+else fail("settings missing markdown last");
+if (/markdownLast|markdownPreview/.test(preload))
+  pass("preload markdown last");
+else fail("preload missing markdown last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
