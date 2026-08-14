@@ -740,6 +740,15 @@ else fail("settings missing unique last");
 if (/uniqueLast|uniquePreview/.test(preload))
   pass("preload unique last");
 else fail("preload missing unique last");
+if (/tableLast|tableText|Table last/.test(main))
+  pass("main table last");
+else fail("main missing table last");
+if (/id="tblMd"|tableLast|Table last/i.test(settings))
+  pass("settings table last");
+else fail("settings missing table last");
+if (/tableLast|tablePreview/.test(preload))
+  pass("preload table last");
+else fail("preload missing table last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

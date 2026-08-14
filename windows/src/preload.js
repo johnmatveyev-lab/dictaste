@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   markdownPreview: (kind) => ipcRenderer.invoke("markdown-preview", kind),
   uniqueLast: (kind) => ipcRenderer.invoke("unique-last", kind),
   uniquePreview: (kind) => ipcRenderer.invoke("unique-preview", kind),
+  tableLast: (kind) => ipcRenderer.invoke("table-last", kind),
+  tablePreview: (kind) => ipcRenderer.invoke("table-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

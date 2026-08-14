@@ -51,6 +51,7 @@
  * - Checklist last (markdown tasks · toggle · strip · numbered)
  * - Markdown last (strip · bold/italic · code · headers · links)
  * - Unique last (dedupe lines · case-insensitive · words · counts)
+ * - Table last (md/csv/tsv · align · transpose · key:value pairs)
  */
 const {
   app,
@@ -6192,6 +6193,216 @@ function uniqueLast(kind = "first") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+
+/**
+ * Table transforms on last transcript (lines / delimited rows).
+ * @param {"md"|"md-header"|"csv"|"tsv"|"md-align"|"transpose"|"pairs-md"|"pairs-csv"|"from-md"|"pipe-clean"} kind
+ */
+function tableText(raw, kind = "md") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "md");
+  const endsWithNl = /\r?\n$/.test(t);
+
+  const splitRows = () => {
+    const lines = t.split(/\r\n|\r|\n/);
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (i === lines.length - 1 && l === "" && endsWithNl) continue;
+      if (!l.trim()) continue;
+      out.push(l);
+    }
+    return out;
+  };
+
+  const detectDelim = (line) => {
+    if (line.includes("\t")) return "\t";
+    if (/^\s*\|/.test(line) && line.includes("|")) return "|";
+    const commas = (line.match(/,/g) || []).length;
+    const pipes = (line.match(/\|/g) || []).length;
+    if (pipes >= 2 && pipes >= commas) return "|";
+    if (commas >= 1) return ",";
+    if (/\s{2,}/.test(line)) return "spaces";
+    return ",";
+  };
+
+  const parseRow = (line, delim) => {
+    let s = line.trim();
+    if (delim === "|") {
+      s = s.replace(/^\|/, "").replace(/\|$/, "");
+      return s.split("|").map((c) => c.trim());
+    }
+    if (delim === "\t") return s.split("\t").map((c) => c.trim());
+    if (delim === "spaces") return s.split(/\s{2,}/).map((c) => c.trim());
+    return s.split(",").map((c) => c.trim());
+  };
+
+  const isSepRow = (cells) =>
+    cells.length > 0 &&
+    cells.every((c) => /^:?-{1,}:?$/.test(String(c).trim()) || c === "");
+
+  const parseGrid = () => {
+    const rows = splitRows();
+    if (!rows.length) return [];
+    const delim = detectDelim(rows[0]);
+    let grid = rows.map((r) => parseRow(r, delim));
+    grid = grid.filter((cells) => !isSepRow(cells));
+    const w = Math.max(1, ...grid.map((r) => r.length));
+    grid = grid.map((r) => {
+      const c = r.slice();
+      while (c.length < w) c.push("");
+      return c;
+    });
+    return grid;
+  };
+
+  const toMd = (grid, withHeader) => {
+    if (!grid.length) return "";
+    const w = grid[0].length;
+    const esc = (c) => String(c).replace(/\|/g, "\\|");
+    const row = (cells) => "| " + cells.map(esc).join(" | ") + " |";
+    const sep = "| " + Array(w).fill("---").join(" | ") + " |";
+    if (withHeader && grid.length >= 1) {
+      const lines = [row(grid[0]), sep, ...grid.slice(1).map(row)];
+      return lines.join("\n") + (endsWithNl ? "\n" : "");
+    }
+    const header = Array(w).fill("Col");
+    header.forEach((_, i) => (header[i] = "Col" + (i + 1)));
+    const lines = [row(header), sep, ...grid.map(row)];
+    return lines.join("\n") + (endsWithNl ? "\n" : "");
+  };
+
+  const toDelim = (grid, d) => {
+    const esc = (c) => {
+      const s = String(c);
+      if (d === "," && /[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    return (
+      grid.map((r) => r.map(esc).join(d)).join("\n") + (endsWithNl ? "\n" : "")
+    );
+  };
+
+  switch (k) {
+    case "md-header":
+      return toMd(parseGrid(), true);
+    case "csv":
+      return toDelim(parseGrid(), ",");
+    case "tsv":
+      return toDelim(parseGrid(), "\t");
+    case "md-align": {
+      const grid = parseGrid();
+      if (!grid.length) return t;
+      const w = grid[0].length;
+      const widths = Array(w).fill(0);
+      for (const r of grid) {
+        for (let i = 0; i < w; i++) {
+          widths[i] = Math.max(widths[i], String(r[i] || "").length, 3);
+        }
+      }
+      const pad = (c, i) => String(c || "").padEnd(widths[i], " ");
+      const row = (cells) =>
+        "| " + cells.map((c, i) => pad(c, i)).join(" | ") + " |";
+      const sep =
+        "| " + widths.map((n) => "-".repeat(n)).join(" | ") + " |";
+      const lines = [row(grid[0]), sep, ...grid.slice(1).map(row)];
+      return lines.join("\n") + (endsWithNl ? "\n" : "");
+    }
+    case "transpose": {
+      const grid = parseGrid();
+      if (!grid.length) return t;
+      const w = grid[0].length;
+      const h = grid.length;
+      const out = [];
+      for (let i = 0; i < w; i++) {
+        const row = [];
+        for (let j = 0; j < h; j++) row.push(grid[j][i] || "");
+        out.push(row);
+      }
+      return toMd(out, true);
+    }
+    case "pairs-md": {
+      const rows = splitRows();
+      const grid = [["Key", "Value"]];
+      for (const line of rows) {
+        const m = line.match(/^\s*([^:=]+?)\s*[:=]\s*(.*)$/);
+        if (m) grid.push([m[1].trim(), m[2].trim()]);
+        else grid.push([line.trim(), ""]);
+      }
+      if (grid.length <= 1) return t;
+      return toMd(grid, true);
+    }
+    case "pairs-csv": {
+      const rows = splitRows();
+      const grid = [["Key", "Value"]];
+      for (const line of rows) {
+        const m = line.match(/^\s*([^:=]+?)\s*[:=]\s*(.*)$/);
+        if (m) grid.push([m[1].trim(), m[2].trim()]);
+        else grid.push([line.trim(), ""]);
+      }
+      return toDelim(grid, ",");
+    }
+    case "from-md": {
+      const grid = parseGrid();
+      return toDelim(grid, "\t");
+    }
+    case "pipe-clean": {
+      const grid = parseGrid();
+      return toMd(grid, true);
+    }
+    case "md":
+    default:
+      return toMd(parseGrid(), true);
+  }
+}
+
+/**
+ * Table-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function tableLast(kind = "md") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for table", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = tableText(src, kind);
+  if (!String(text || "").trim()) {
+    notify("Nothing to tabulate", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Table made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -7838,6 +8049,22 @@ function rebuildTrayMenu() {
         { label: "Drop blanks", click: () => uniqueLast("drop-blanks") },
       ],
     },
+    {
+      label: "Table last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Markdown table", click: () => tableLast("md") },
+        { label: "Markdown (first row header)", click: () => tableLast("md-header") },
+        { label: "Aligned markdown", click: () => tableLast("md-align") },
+        { label: "CSV", click: () => tableLast("csv") },
+        { label: "TSV", click: () => tableLast("tsv") },
+        { label: "Transpose", click: () => tableLast("transpose") },
+        { label: "Key:value → MD table", click: () => tableLast("pairs-md") },
+        { label: "Key:value → CSV", click: () => tableLast("pairs-csv") },
+        { label: "MD table → TSV", click: () => tableLast("from-md") },
+        { label: "Clean pipe table", click: () => tableLast("pipe-clean") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -8375,6 +8602,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "first"),
       text: uniqueText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("table-last", (_e, kind) =>
+    tableLast(String(kind || "md"))
+  );
+  ipcMain.handle("table-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "md"),
+      text: tableText(src, kind),
       source: src,
     };
   });

@@ -473,6 +473,20 @@
     <button type="button" id="unBlanks" class="ghost">Drop blanks</button>
   </div>
 
+  <label>Table last <span style="font-weight:400;color:var(--muted)">(md/csv/tsv · align · transpose · key:value pairs · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="tblMd" class="ghost">MD table</button>
+    <button type="button" id="tblMdHeader" class="ghost">MD + header</button>
+    <button type="button" id="tblAlign" class="ghost">Aligned MD</button>
+    <button type="button" id="tblCsv" class="ghost">CSV</button>
+    <button type="button" id="tblTsv" class="ghost">TSV</button>
+    <button type="button" id="tblTranspose" class="ghost">Transpose</button>
+    <button type="button" id="tblPairsMd" class="ghost">Pairs→MD</button>
+    <button type="button" id="tblPairsCsv" class="ghost">Pairs→CSV</button>
+    <button type="button" id="tblFromMd" class="ghost">MD→TSV</button>
+    <button type="button" id="tblPipe" class="ghost">Clean pipes</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1790,6 +1804,23 @@
     document.getElementById('unCount').onclick = () => uniqueNow('count');
     document.getElementById('unDups').onclick = () => uniqueNow('dups-only');
     document.getElementById('unBlanks').onclick = () => uniqueNow('drop-blanks');
+    async function tableNow(kind) {
+      const r = await window.dictaste.tableLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Table: no changes' : ('Table · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Table failed');
+    }
+    document.getElementById('tblMd').onclick = () => tableNow('md');
+    document.getElementById('tblMdHeader').onclick = () => tableNow('md-header');
+    document.getElementById('tblAlign').onclick = () => tableNow('md-align');
+    document.getElementById('tblCsv').onclick = () => tableNow('csv');
+    document.getElementById('tblTsv').onclick = () => tableNow('tsv');
+    document.getElementById('tblTranspose').onclick = () => tableNow('transpose');
+    document.getElementById('tblPairsMd').onclick = () => tableNow('pairs-md');
+    document.getElementById('tblPairsCsv').onclick = () => tableNow('pairs-csv');
+    document.getElementById('tblFromMd').onclick = () => tableNow('from-md');
+    document.getElementById('tblPipe').onclick = () => tableNow('pipe-clean');
+
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };
