@@ -4147,6 +4147,113 @@ function filterLinesLast(kind = "drop-blank") {
 }
 
 /**
+ * Split last transcript into lines by delimiter / unit.
+ * @param {"sentences"|"words"|"comma"|"semicolon"|"pipe"|"slash"|"tab"|"space"|"and"|"paragraphs"} kind
+ */
+function splitText(raw, kind = "sentences") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  let parts;
+  switch (String(kind || "sentences")) {
+    case "words":
+      parts = t.match(/[^\s]+/g) || [];
+      break;
+    case "comma":
+      parts = t.split(/\s*,\s*/);
+      break;
+    case "semicolon":
+      parts = t.split(/\s*;\s*/);
+      break;
+    case "pipe":
+      parts = t.split(/\s*\|\s*/);
+      break;
+    case "slash":
+      parts = t.split(/\s*\/\s*/);
+      break;
+    case "tab":
+      parts = t.split(/\t+/);
+      break;
+    case "space":
+      parts = t.split(/ +/);
+      break;
+    case "and":
+      // reverse of Oxford "and" join: split on ", and " / " and " / commas
+      parts = t
+        .split(/\s*,\s*and\s+|\s+and\s+|\s*,\s*/i)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      break;
+    case "paragraphs":
+      parts = t
+        .split(/\r\n\s*\r\n|\r\s*\r|\n\s*\n/)
+        .map((p) => p.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      break;
+    case "sentences":
+    default: {
+      // keep trailing punctuation with each sentence
+      const re = /[^.!?…\r\n]+(?:[.!?…]+|$)/g;
+      const found = t.match(re) || [];
+      parts = found
+        .map((s) => s.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      if (!parts.length && t.trim()) parts = [t.trim()];
+      break;
+    }
+  }
+  parts = (parts || [])
+    .map((p) => String(p || "").trim())
+    .filter((p) => p.length > 0);
+  return parts.join(eol);
+}
+
+/**
+ * Split last transcript into lines and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function splitLast(kind = "sentences") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to split", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = splitText(src, kind);
+  if (!text) {
+    notify("Nothing to split", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Split made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -5539,6 +5646,22 @@ function rebuildTrayMenu() {
         { label: "Concat (no sep)", click: () => joinLinesLast("concat") },
       ],
     },
+    {
+      label: "Split last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Sentences → lines", click: () => splitLast("sentences") },
+        { label: "Words → lines", click: () => splitLast("words") },
+        { label: "Commas → lines", click: () => splitLast("comma") },
+        { label: "Semicolons → lines", click: () => splitLast("semicolon") },
+        { label: "Pipes → lines", click: () => splitLast("pipe") },
+        { label: "Slashes → lines", click: () => splitLast("slash") },
+        { label: "Tabs → lines", click: () => splitLast("tab") },
+        { label: "Spaces → lines", click: () => splitLast("space") },
+        { label: "Oxford and → lines", click: () => splitLast("and") },
+        { label: "Paragraphs → lines", click: () => splitLast("paragraphs") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -5881,6 +6004,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "space"),
       text: joinLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("split-last", (_e, kind) =>
+    splitLast(String(kind || "sentences"))
+  );
+  ipcMain.handle("split-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "sentences"),
+      text: splitText(src, kind),
       source: src,
     };
   });

@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   filterLinesPreview: (kind) => ipcRenderer.invoke("filter-lines-preview", kind),
   joinLinesLast: (kind) => ipcRenderer.invoke("join-lines-last", kind),
   joinLinesPreview: (kind) => ipcRenderer.invoke("join-lines-preview", kind),
+  splitLast: (kind) => ipcRenderer.invoke("split-last", kind),
+  splitPreview: (kind) => ipcRenderer.invoke("split-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

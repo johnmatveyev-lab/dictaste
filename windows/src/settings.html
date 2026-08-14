@@ -250,6 +250,20 @@
     <button type="button" id="joinConcat" class="ghost">Concat</button>
   </div>
 
+  <label>Split last <span style="font-weight:400;color:var(--muted)">(sentences · words · comma · ; · | · / · tab · space · and · paragraphs · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="splitSentences" class="ghost">Sentences</button>
+    <button type="button" id="splitWords" class="ghost">Words</button>
+    <button type="button" id="splitComma" class="ghost">Comma</button>
+    <button type="button" id="splitSemicolon" class="ghost">;</button>
+    <button type="button" id="splitPipe" class="ghost">|</button>
+    <button type="button" id="splitSlash" class="ghost">/</button>
+    <button type="button" id="splitTab" class="ghost">Tab</button>
+    <button type="button" id="splitSpace" class="ghost">Space</button>
+    <button type="button" id="splitAnd" class="ghost">and</button>
+    <button type="button" id="splitParagraphs" class="ghost">Paragraphs</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1294,6 +1308,24 @@
     document.getElementById('joinAnd').onclick = () => joinLinesNow('and');
     document.getElementById('joinNewline').onclick = () => joinLinesNow('newline');
     document.getElementById('joinConcat').onclick = () => joinLinesNow('concat');
+    async function splitNow(kind) {
+      const r = await window.dictaste.splitLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Split failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('splitSentences').onclick = () => splitNow('sentences');
+    document.getElementById('splitWords').onclick = () => splitNow('words');
+    document.getElementById('splitComma').onclick = () => splitNow('comma');
+    document.getElementById('splitSemicolon').onclick = () => splitNow('semicolon');
+    document.getElementById('splitPipe').onclick = () => splitNow('pipe');
+    document.getElementById('splitSlash').onclick = () => splitNow('slash');
+    document.getElementById('splitTab').onclick = () => splitNow('tab');
+    document.getElementById('splitSpace').onclick = () => splitNow('space');
+    document.getElementById('splitAnd').onclick = () => splitNow('and');
+    document.getElementById('splitParagraphs').onclick = () => splitNow('paragraphs');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

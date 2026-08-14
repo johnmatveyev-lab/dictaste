@@ -603,6 +603,15 @@ else fail("settings missing join lines last");
 if (/joinLinesLast|joinLinesPreview/.test(preload))
   pass("preload join lines last");
 else fail("preload missing join lines last");
+if (/splitLast|splitText|Split last/.test(main))
+  pass("main split last");
+else fail("main missing split last");
+if (/id="splitSentences"|splitLast|Split last/i.test(settings))
+  pass("settings split last");
+else fail("settings missing split last");
+if (/splitLast|splitPreview/.test(preload))
+  pass("preload split last");
+else fail("preload missing split last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
