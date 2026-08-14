@@ -59,6 +59,8 @@
  * - Diff last (vs previous history · clipboard · unified/stats)
  * - Align last (colon/equals/pipe · numbers · compact)
  * - Increment last (all/first/last · +1/-1 · pad)
+ * - Normalize last (NFC · accents · ASCII · ZW · tidy)
+ * - Sequence last (1..n · letters · roman · expand range)
  */
 const {
   app,
@@ -7181,6 +7183,312 @@ function incrementLast(kind = "all-plus") {
 }
 
 /**
+ * Normalize last transcript (unicode, accents, ASCII punctuation, zero-width, tidy).
+ * @param {"nfc"|"nfd"|"strip-accents"|"ascii"|"strip-zw"|"strip-controls"|"fix-space"|"tidy"} kind
+ */
+function normalizeText(raw, kind = "tidy") {
+  let t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "tidy");
+
+  const stripZw = (s) =>
+    s.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "");
+  const stripControls = (s) =>
+    s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  const toAsciiPunct = (s) =>
+    s
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/[\u2013\u2014\u2015]/g, "-")
+      .replace(/\u2026/g, "...")
+      .replace(/[\u00A0\u202F\u2007]/g, " ")
+      .replace(/\u00B7/g, "·")
+      .replace(/[\u2032]/g, "'")
+      .replace(/[\u2033]/g, '"');
+  const stripAccents = (s) => {
+    try {
+      return s.normalize("NFD").replace(/\p{M}+/gu, "");
+    } catch {
+      return s.normalize("NFD").replace(/[\u0300-\u036f]+/g, "");
+    }
+  };
+  const fixSpace = (s) => {
+    let o = s;
+    // protect ellipsis / multi-dot so we do not insert spaces inside ...
+    const dots = [];
+    o = o.replace(/\.{2,}/g, (m) => {
+      dots.push(m);
+      return `\uE000${dots.length - 1}\uE001`;
+    });
+    // space before common punctuation → remove
+    o = o.replace(/\s+([,.;:!?%])/g, "$1");
+    // ensure single space after punctuation when followed by a word char
+    o = o.replace(/([,.;:!?])(?=[^\s\d.,;:!?])/g, "$1 ");
+    // no space before closing brackets / after opening
+    o = o.replace(/\s+([)\]}])/g, "$1");
+    o = o.replace(/([(\[{])\s+/g, "$1");
+    // collapse runs of spaces (keep newlines)
+    o = o.replace(/[^\S\r\n]{2,}/g, " ");
+    // trim trailing spaces per line
+    o = o
+      .split(/\r\n|\r|\n/)
+      .map((l) => l.replace(/[ \t]+$/g, ""))
+      .join("\n");
+    o = o.replace(/\uE000(\d+)\uE001/g, (_, i) => dots[Number(i)] || "...");
+    return o;
+  };
+
+  switch (k) {
+    case "nfc":
+      try {
+        return t.normalize("NFC");
+      } catch {
+        return t;
+      }
+    case "nfd":
+      try {
+        return t.normalize("NFD");
+      } catch {
+        return t;
+      }
+    case "strip-accents":
+      return stripAccents(t);
+    case "ascii":
+      return toAsciiPunct(t);
+    case "strip-zw":
+      return stripZw(t);
+    case "strip-controls":
+      return stripControls(t);
+    case "fix-space":
+      return fixSpace(t);
+    case "tidy":
+    default: {
+      let o = t;
+      try {
+        o = o.normalize("NFC");
+      } catch {
+        /* ignore */
+      }
+      o = stripZw(o);
+      o = stripControls(o);
+      o = toAsciiPunct(o);
+      o = fixSpace(o);
+      return o;
+    }
+  }
+}
+
+function normalizeLast(kind = "tidy") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to normalize", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = normalizeText(src, kind);
+  if (text === src) {
+    notify("Normalize made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+function toRoman(n) {
+  const v = Math.max(1, Math.min(3999, Math.floor(Number(n) || 1)));
+  const map = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
+    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
+    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+  ];
+  let left = v;
+  let out = "";
+  for (const [num, sym] of map) {
+    while (left >= num) {
+      out += sym;
+      left -= num;
+    }
+  }
+  return out;
+}
+
+function colLetters(n) {
+  let i = Math.max(1, Math.floor(Number(n) || 1));
+  let s = "";
+  while (i > 0) {
+    i -= 1;
+    s = String.fromCharCode(65 + (i % 26)) + s;
+    i = Math.floor(i / 26);
+  }
+  return s;
+}
+
+function parseRangeToken(s) {
+  const t = String(s || "").trim();
+  let m = t.match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+  if (m) {
+    const a = parseInt(m[1], 10);
+    const b = parseInt(m[2], 10);
+    if (Number.isFinite(a) && Number.isFinite(b) && Math.abs(b - a) <= 500) {
+      const dir = a <= b ? 1 : -1;
+      const out = [];
+      for (let i = a; dir > 0 ? i <= b : i >= b; i += dir) out.push(String(i));
+      return out;
+    }
+  }
+  m = t.match(/^([A-Za-z])\s*[-–—]\s*([A-Za-z])$/);
+  if (m) {
+    const a = m[1].toUpperCase().charCodeAt(0);
+    const b = m[2].toUpperCase().charCodeAt(0);
+    if (Math.abs(b - a) <= 25) {
+      const dir = a <= b ? 1 : -1;
+      const out = [];
+      for (let i = a; dir > 0 ? i <= b : i >= b; i += dir) out.push(String.fromCharCode(i));
+      return out;
+    }
+  }
+  return null;
+}
+
+function sequenceText(raw, kind = "number") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "number");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const finish = (arr) => {
+    let s = arr.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+  const nonEmpty = lines.filter((l) => l.trim());
+
+  const prefixLines = (fmt) => {
+    let i = 0;
+    return finish(
+      lines.map((l) => {
+        if (!l.trim()) return l;
+        i += 1;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        const body = l.replace(/^\s*(?:\d+|[A-Za-z]|[IVXLCDM]+)[.)]\s+/i, "").trimStart();
+        return lead + fmt(i) + body;
+      })
+    );
+  };
+
+  switch (k) {
+    case "number-pad": {
+      const n = Math.max(1, nonEmpty.length);
+      const w = String(n).length;
+      return prefixLines((i) => `${String(i).padStart(w, "0")}. `);
+    }
+    case "letters":
+      return prefixLines((i) => `${colLetters(i)}. `);
+    case "roman":
+      return prefixLines((i) => `${toRoman(i)}. `);
+    case "expand-range": {
+      const out = [];
+      for (const l of lines) {
+        if (!l.trim()) {
+          out.push(l);
+          continue;
+        }
+        const lead = (l.match(/^\s*/) || [""])[0];
+        const expanded = parseRangeToken(l);
+        if (expanded) {
+          for (const item of expanded) out.push(lead + item);
+        } else {
+          out.push(l);
+        }
+      }
+      return finish(out);
+    }
+    case "n10":
+    case "n20":
+    case "n5": {
+      const n = k === "n20" ? 20 : k === "n5" ? 5 : 10;
+      return Array.from({ length: n }, (_, i) => String(i + 1)).join("\n");
+    }
+    case "continue": {
+      let start = 1;
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const m = lines[i].match(/^\s*(\d+)/);
+        if (m) {
+          start = parseInt(m[1], 10) + 1;
+          break;
+        }
+      }
+      let next = start;
+      return finish(
+        lines.map((l) => {
+          if (l.trim()) return l;
+          const v = String(next);
+          next += 1;
+          return v;
+        })
+      );
+    }
+    case "number":
+    default:
+      return prefixLines((i) => `${i}. `);
+  }
+}
+
+function sequenceLast(kind = "number") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for sequence", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = sequenceText(src, kind);
+  if (text === src) {
+    notify("Sequence made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
  */
@@ -9182,6 +9490,34 @@ function rebuildTrayMenu() {
         { label: "All −10", click: () => incrementLast("minus-10") },
       ],
     },
+    {
+      label: "Normalize last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Tidy (recommended)", click: () => normalizeLast("tidy") },
+        { label: "Unicode NFC", click: () => normalizeLast("nfc") },
+        { label: "Unicode NFD", click: () => normalizeLast("nfd") },
+        { label: "Strip accents", click: () => normalizeLast("strip-accents") },
+        { label: "Smart → ASCII punct", click: () => normalizeLast("ascii") },
+        { label: "Strip zero-width", click: () => normalizeLast("strip-zw") },
+        { label: "Strip controls", click: () => normalizeLast("strip-controls") },
+        { label: "Fix spacing", click: () => normalizeLast("fix-space") },
+      ],
+    },
+    {
+      label: "Sequence last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Number lines 1.", click: () => sequenceLast("number") },
+        { label: "Number lines 01.", click: () => sequenceLast("number-pad") },
+        { label: "Letter lines A.", click: () => sequenceLast("letters") },
+        { label: "Roman lines I.", click: () => sequenceLast("roman") },
+        { label: "Expand 1-10 / A-D", click: () => sequenceLast("expand-range") },
+        { label: "Fill blank lines", click: () => sequenceLast("continue") },
+        { label: "Make 1..5", click: () => sequenceLast("n5") },
+        { label: "Make 1..10", click: () => sequenceLast("n10") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -9797,6 +10133,32 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "all-plus"),
       text: incrementText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("sequence-last", (_e, kind) =>
+    sequenceLast(String(kind || "number"))
+  );
+  ipcMain.handle("sequence-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "number"),
+      text: sequenceText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("normalize-last", (_e, kind) =>
+    normalizeLast(String(kind || "tidy"))
+  );
+  ipcMain.handle("normalize-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "tidy"),
+      text: normalizeText(src, kind),
       source: src,
     };
   });

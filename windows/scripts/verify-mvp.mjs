@@ -812,6 +812,24 @@ else fail("settings missing increment last");
 if (/incrementLast|incrementPreview/.test(preload))
   pass("preload increment last");
 else fail("preload missing increment last");
+if (/normalizeLast|normalizeText|Normalize last/.test(main))
+  pass("main normalize last");
+else fail("main missing normalize last");
+if (/id="nmTidy"|normalizeLast|Normalize last/i.test(settings))
+  pass("settings normalize last");
+else fail("settings missing normalize last");
+if (/normalizeLast|normalizePreview/.test(preload))
+  pass("preload normalize last");
+else fail("preload missing normalize last");
+if (/sequenceLast|sequenceText|Sequence last/.test(main))
+  pass("main sequence last");
+else fail("main missing sequence last");
+if (/id="sqNum"|sequenceLast|Sequence last/i.test(settings))
+  pass("settings sequence last");
+else fail("settings missing sequence last");
+if (/sequenceLast|sequencePreview/.test(preload))
+  pass("preload sequence last");
+else fail("preload missing sequence last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

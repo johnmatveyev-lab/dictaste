@@ -580,6 +580,30 @@
     <button type="button" id="inc10M" class="ghost">All −10</button>
   </div>
 
+  <label>Normalize last <span style="font-weight:400;color:var(--muted)">(NFC · accents · ASCII punct · zero-width · tidy · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="nmTidy" class="ghost">Tidy</button>
+    <button type="button" id="nmNfc" class="ghost">NFC</button>
+    <button type="button" id="nmNfd" class="ghost">NFD</button>
+    <button type="button" id="nmAccents" class="ghost">Strip accents</button>
+    <button type="button" id="nmAscii" class="ghost">ASCII punct</button>
+    <button type="button" id="nmZw" class="ghost">Strip ZW</button>
+    <button type="button" id="nmCtrl" class="ghost">Strip controls</button>
+    <button type="button" id="nmSpace" class="ghost">Fix space</button>
+  </div>
+
+  <label>Sequence last <span style="font-weight:400;color:var(--muted)">(1..n · letters · roman · expand range · fill blanks · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="sqNum" class="ghost">1. 2. 3.</button>
+    <button type="button" id="sqPad" class="ghost">01. 02.</button>
+    <button type="button" id="sqLet" class="ghost">A. B. C.</button>
+    <button type="button" id="sqRom" class="ghost">I. II.</button>
+    <button type="button" id="sqRange" class="ghost">Expand 1-10</button>
+    <button type="button" id="sqCont" class="ghost">Fill blanks</button>
+    <button type="button" id="sqN5" class="ghost">1..5</button>
+    <button type="button" id="sqN10" class="ghost">1..10</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -2020,6 +2044,34 @@
     document.getElementById('incLastM').onclick = () => incrementNow('last-minus');
     document.getElementById('inc10').onclick = () => incrementNow('plus-10');
     document.getElementById('inc10M').onclick = () => incrementNow('minus-10');
+    async function normalizeNow(kind) {
+      const r = await window.dictaste.normalizeLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Normalize: no changes' : ('Normalize · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Normalize failed');
+    }
+    document.getElementById('nmTidy').onclick = () => normalizeNow('tidy');
+    document.getElementById('nmNfc').onclick = () => normalizeNow('nfc');
+    document.getElementById('nmNfd').onclick = () => normalizeNow('nfd');
+    document.getElementById('nmAccents').onclick = () => normalizeNow('strip-accents');
+    document.getElementById('nmAscii').onclick = () => normalizeNow('ascii');
+    document.getElementById('nmZw').onclick = () => normalizeNow('strip-zw');
+    document.getElementById('nmCtrl').onclick = () => normalizeNow('strip-controls');
+    document.getElementById('nmSpace').onclick = () => normalizeNow('fix-space');
+    async function sequenceNow(kind) {
+      const r = await window.dictaste.sequenceLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Sequence: no changes' : ('Sequence · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Sequence failed');
+    }
+    document.getElementById('sqNum').onclick = () => sequenceNow('number');
+    document.getElementById('sqPad').onclick = () => sequenceNow('number-pad');
+    document.getElementById('sqLet').onclick = () => sequenceNow('letters');
+    document.getElementById('sqRom').onclick = () => sequenceNow('roman');
+    document.getElementById('sqRange').onclick = () => sequenceNow('expand-range');
+    document.getElementById('sqCont').onclick = () => sequenceNow('continue');
+    document.getElementById('sqN5').onclick = () => sequenceNow('n5');
+    document.getElementById('sqN10').onclick = () => sequenceNow('n10');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
