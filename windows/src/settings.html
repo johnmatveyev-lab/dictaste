@@ -501,6 +501,20 @@
     <button type="button" id="csTrain" class="ghost">Train</button>
   </div>
 
+  <label>Comment last <span style="font-weight:400;color:var(--muted)">(// # /* */ HTML · strip · toggle · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="cmSlash" class="ghost">// lines</button>
+    <button type="button" id="cmHash" class="ghost"># lines</button>
+    <button type="button" id="cmSemi" class="ghost">; lines</button>
+    <button type="button" id="cmBlock" class="ghost">/* block */</button>
+    <button type="button" id="cmHtml" class="ghost">HTML block</button>
+    <button type="button" id="cmPy" class="ghost">Py docstring</button>
+    <button type="button" id="cmJsx" class="ghost">JSX line</button>
+    <button type="button" id="cmToggleSlash" class="ghost">Toggle //</button>
+    <button type="button" id="cmToggleHash" class="ghost">Toggle #</button>
+    <button type="button" id="cmStrip" class="ghost">Strip</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1850,6 +1864,22 @@
     document.getElementById('csWords').onclick = () => caseNow('words');
     document.getElementById('csTitle').onclick = () => caseNow('title');
     document.getElementById('csTrain').onclick = () => caseNow('train');
+    async function commentNow(kind) {
+      const r = await window.dictaste.commentLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Comment: no changes' : ('Comment · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Comment failed');
+    }
+    document.getElementById('cmSlash').onclick = () => commentNow('line-slash');
+    document.getElementById('cmHash').onclick = () => commentNow('line-hash');
+    document.getElementById('cmSemi').onclick = () => commentNow('line-semi');
+    document.getElementById('cmBlock').onclick = () => commentNow('block-c');
+    document.getElementById('cmHtml').onclick = () => commentNow('block-html');
+    document.getElementById('cmPy').onclick = () => commentNow('python-doc');
+    document.getElementById('cmJsx').onclick = () => commentNow('jsx-line');
+    document.getElementById('cmToggleSlash').onclick = () => commentNow('toggle-slash');
+    document.getElementById('cmToggleHash').onclick = () => commentNow('toggle-hash');
+    document.getElementById('cmStrip').onclick = () => commentNow('strip');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

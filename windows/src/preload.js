@@ -77,6 +77,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   tablePreview: (kind) => ipcRenderer.invoke("table-preview", kind),
   caseLast: (kind) => ipcRenderer.invoke("case-last", kind),
   casePreview: (kind) => ipcRenderer.invoke("case-preview", kind),
+  commentLast: (kind) => ipcRenderer.invoke("comment-last", kind),
+  commentPreview: (kind) => ipcRenderer.invoke("comment-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

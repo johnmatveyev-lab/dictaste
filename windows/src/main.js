@@ -53,6 +53,7 @@
  * - Unique last (dedupe lines · case-insensitive · words · counts)
  * - Table last (md/csv/tsv · align · transpose · key:value pairs)
  * - Case last (snake · camel · pascal · kebab · CONST · words)
+ * - Comment last (// # block/HTML · strip · toggle)
  */
 const {
   app,
@@ -75,6 +76,40 @@ const { exec, spawn } = require("child_process");
 
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
 const DEFAULT_API = "https://dictaste.vercel.app";
+
+function trackActivation(event, extra = {}) {
+  try {
+    const key = `dt_track_${event}`;
+    if (cfg && cfg[key]) return;
+    if (cfg) {
+      cfg[key] = true;
+      try {
+        saveConfig(cfg);
+      } catch {
+        /* ignore */
+      }
+    }
+    const body = JSON.stringify({
+      event,
+      props: { os: "windows", path: "app", ...extra },
+    });
+    const { request } = require("https");
+    const req = request(
+      {
+        hostname: "dictaste.vercel.app",
+        path: "/api/track",
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        timeout: 8000,
+      },
+      (res) => res.resume()
+    );
+    req.on("error", () => {});
+    req.end(body);
+  } catch {
+    /* never block dictation */
+  }
+}
 
 function loadConfig() {
   try {
@@ -957,6 +992,7 @@ function requestBinary(url, { method = "GET", headers = {}, body } = {}) {
 
 /** Resolve preferred engine and speak (managed → NVIDIA → OpenAI → SAPI). */
 async function speakText(text) {
+  if (String(text || "").trim()) trackActivation("first_read");
   const engine = cfg.ttsEngine || "auto";
   const tryNeural =
     engine === "managed" ||
@@ -6509,6 +6545,151 @@ function caseLast(kind = "snake") {
 }
 
 /**
+ * Comment-style wrap / strip on last transcript lines.
+ * @param {"line-slash"|"line-hash"|"line-semi"|"block-c"|"block-html"|"python-doc"|"strip"|"toggle-slash"|"toggle-hash"|"jsx-line"} kind
+ */
+function commentText(raw, kind = "line-slash") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "line-slash");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const mapLines = (fn) => {
+    const out = lines.map(fn);
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  const stripLineComment = (l) => {
+    let x = l;
+    x = x.replace(/^(\s*)\/\/\s?/, "$1");
+    x = x.replace(/^(\s*)#\s?/, "$1");
+    x = x.replace(/^(\s*);+\s?/, "$1");
+    x = x.replace(/^(\s*)<!--\s?/, "$1").replace(/\s?-->\s*$/, "");
+    x = x.replace(/^(\s*)\/\*\s?/, "$1").replace(/\s?\*\/\s*$/, "");
+    x = x.replace(/^(\s*)\*\s?/, "$1");
+    x = x.replace(/^(\s*)\{\s*\/\*\s?/, "$1").replace(/\s?\*\/\s*\}\s*$/, "");
+    return x;
+  };
+
+  switch (k) {
+    case "line-hash":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*#/.test(l)) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "# " + l.trimStart();
+      });
+    case "line-semi":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*;/.test(l)) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "; " + l.trimStart();
+      });
+    case "block-c": {
+      const body = t.replace(/\s+$/, "");
+      if (/^\s*\/\*[\s\S]*\*\/\s*$/.test(body)) return t;
+      return "/*\n" + body + "\n*/" + (endsWithNl ? "\n" : "");
+    }
+    case "block-html": {
+      const body = t.replace(/\s+$/, "");
+      if (/^\s*<!--[\s\S]*-->\s*$/.test(body)) return t;
+      return "<!--\n" + body + "\n-->" + (endsWithNl ? "\n" : "");
+    }
+    case "python-doc": {
+      const body = t.replace(/\s+$/, "");
+      const dq = String.fromCharCode(34).repeat(3);
+      const sq = String.fromCharCode(39).repeat(3);
+      if (
+        new RegExp("^\\s*" + dq + "[\\s\\S]*" + dq + "\\s*$").test(body) ||
+        new RegExp("^\\s*" + sq + "[\\s\\S]*" + sq + "\\s*$").test(body)
+      ) {
+        return t;
+      }
+      return dq + "\n" + body + "\n" + dq + (endsWithNl ? "\n" : "");
+    }
+    case "jsx-line":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*\{\s*\/\*/.test(l)) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "{/* " + l.trimStart() + " */}";
+      });
+    case "strip":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        return stripLineComment(l);
+      });
+    case "toggle-slash":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*\/\//.test(l)) return stripLineComment(l);
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "// " + l.trimStart();
+      });
+    case "toggle-hash":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*#/.test(l)) return stripLineComment(l);
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "# " + l.trimStart();
+      });
+    case "line-slash":
+    default:
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        if (/^\s*\/\//.test(l)) return l;
+        const lead = (l.match(/^\s*/) || [""])[0];
+        return lead + "// " + l.trimStart();
+      });
+  }
+}
+
+/**
+ * Comment-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function commentLast(kind = "line-slash") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to comment", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = commentText(src, kind);
+  if (text === src) {
+    notify("Comment made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -8186,6 +8367,22 @@ function rebuildTrayMenu() {
         { label: "Train-Case", click: () => caseLast("train") },
       ],
     },
+    {
+      label: "Comment last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "// line comments", click: () => commentLast("line-slash") },
+        { label: "# hash comments", click: () => commentLast("line-hash") },
+        { label: "; semi comments", click: () => commentLast("line-semi") },
+        { label: "/* block */", click: () => commentLast("block-c") },
+        { label: "<!-- HTML block -->", click: () => commentLast("block-html") },
+        { label: "Python docstring", click: () => commentLast("python-doc") },
+        { label: "JSX line comment", click: () => commentLast("jsx-line") },
+        { label: "Toggle //", click: () => commentLast("toggle-slash") },
+        { label: "Toggle #", click: () => commentLast("toggle-hash") },
+        { label: "Strip comments", click: () => commentLast("strip") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -8752,7 +8949,20 @@ app.whenReady().then(() => {
       source: src,
     };
   });
-  ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
+    ipcMain.handle("comment-last", (_e, kind) =>
+    commentLast(String(kind || "line-slash"))
+  );
+  ipcMain.handle("comment-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "line-slash"),
+      text: commentText(src, kind),
+      source: src,
+    };
+  });
+ipcMain.handle("copy-last-transcript", (_e, index, opts) =>
     copyLastTranscript(
       Number(index) || 0,
       opts && typeof opts === "object" ? opts : {}
@@ -8935,6 +9145,10 @@ app.whenReady().then(() => {
     }
     pushHistory(polished);
     const del = deliverText(polished);
+    if (polished) {
+      trackActivation("first_dictation");
+      if (polished !== raw) trackActivation("first_polish");
+    }
     broadcastStatus({ phase: "idle", last: polished, appended: !!cfg?.appendDictation });
     if (del.mode === "paste") {
       notifyDeliver(polished, "paste");

@@ -758,6 +758,15 @@ else fail("settings missing case last");
 if (/caseLast|casePreview/.test(preload))
   pass("preload case last");
 else fail("preload missing case last");
+if (/commentLast|commentText|Comment last/.test(main))
+  pass("main comment last");
+else fail("main missing comment last");
+if (/id="cmSlash"|commentLast|Comment last/i.test(settings))
+  pass("settings comment last");
+else fail("settings missing comment last");
+if (/commentLast|commentPreview/.test(preload))
+  pass("preload comment last");
+else fail("preload missing comment last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
