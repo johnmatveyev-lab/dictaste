@@ -283,6 +283,22 @@
     <button type="button" id="psStripIndent" class="ghost">Strip indent</button>
   </div>
 
+  <label>Pad lines last <span style="font-weight:400;color:var(--muted)">(align · left/right pad · zero-pad numbers · width 40/80 · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="padAlignLeft" class="ghost">Align left</button>
+    <button type="button" id="padAlignRight" class="ghost">Align right</button>
+    <button type="button" id="padAlignCenter" class="ghost">Center</button>
+    <button type="button" id="padLeft2" class="ghost">Left 2</button>
+    <button type="button" id="padLeft4" class="ghost">Left 4</button>
+    <button type="button" id="padRight2" class="ghost">Right 2</button>
+    <button type="button" id="padRight4" class="ghost">Right 4</button>
+    <button type="button" id="padZero2" class="ghost">Zero 2</button>
+    <button type="button" id="padZero3" class="ghost">Zero 3</button>
+    <button type="button" id="padZero4" class="ghost">Zero 4</button>
+    <button type="button" id="padWidth40" class="ghost">Width 40</button>
+    <button type="button" id="padWidth80" class="ghost">Width 80</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1368,6 +1384,26 @@
     document.getElementById('psSemicolon').onclick = () => prefixSuffixNow('semicolon');
     document.getElementById('psStripBullet').onclick = () => prefixSuffixNow('strip-bullet');
     document.getElementById('psStripIndent').onclick = () => prefixSuffixNow('strip-indent');
+    async function padLinesNow(kind) {
+      const r = await window.dictaste.padLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Pad failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('padAlignLeft').onclick = () => padLinesNow('align-left');
+    document.getElementById('padAlignRight').onclick = () => padLinesNow('align-right');
+    document.getElementById('padAlignCenter').onclick = () => padLinesNow('align-center');
+    document.getElementById('padLeft2').onclick = () => padLinesNow('left2');
+    document.getElementById('padLeft4').onclick = () => padLinesNow('left4');
+    document.getElementById('padRight2').onclick = () => padLinesNow('right2');
+    document.getElementById('padRight4').onclick = () => padLinesNow('right4');
+    document.getElementById('padZero2').onclick = () => padLinesNow('zero2');
+    document.getElementById('padZero3').onclick = () => padLinesNow('zero3');
+    document.getElementById('padZero4').onclick = () => padLinesNow('zero4');
+    document.getElementById('padWidth40').onclick = () => padLinesNow('width40');
+    document.getElementById('padWidth80').onclick = () => padLinesNow('width80');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

@@ -4352,6 +4352,114 @@ function prefixSuffixLinesLast(kind = "bullet") {
 }
 
 /**
+ * Pad / align lines of last transcript.
+ * @param {"left2"|"left4"|"right2"|"right4"|"align-left"|"align-right"|"align-center"|"zero2"|"zero3"|"zero4"|"width40"|"width80"} kind
+ */
+function padLinesText(raw, kind = "align-left") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const lines = t.split(/\r\n|\r|\n/);
+  const k = String(kind || "align-left");
+
+  const visible = lines.filter((l) => String(l || "").trim().length > 0);
+  const maxLen = visible.reduce((m, l) => Math.max(m, l.length), 0);
+
+  const padZeroNum = (l, width) => {
+    const m = String(l).match(/^(\s*)([+-]?\d+)(.*)$/);
+    if (!m) return l;
+    const [, lead, num, rest] = m;
+    const sign = num.startsWith("-") || num.startsWith("+") ? num[0] : "";
+    const digits = sign ? num.slice(1) : num;
+    if (digits.length >= width) return l;
+    return `${lead}${sign}${digits.padStart(width, "0")}${rest}`;
+  };
+
+  return lines
+    .map((l) => {
+      const blank = !String(l || "").trim();
+      if (blank) return l;
+      switch (k) {
+        case "left2":
+          return `  ${l}`;
+        case "left4":
+          return `    ${l}`;
+        case "right2":
+          return `${l}  `;
+        case "right4":
+          return `${l}    `;
+        case "align-right":
+          return maxLen > 0 ? l.padStart(maxLen, " ") : l;
+        case "align-center": {
+          if (maxLen <= l.length) return l;
+          const total = maxLen - l.length;
+          const left = Math.floor(total / 2);
+          return `${" ".repeat(left)}${l}${" ".repeat(total - left)}`;
+        }
+        case "zero2":
+          return padZeroNum(l, 2);
+        case "zero3":
+          return padZeroNum(l, 3);
+        case "zero4":
+          return padZeroNum(l, 4);
+        case "width40":
+          return l.length >= 40 ? l : l.padEnd(40, " ");
+        case "width80":
+          return l.length >= 80 ? l : l.padEnd(80, " ");
+        case "align-left":
+        default:
+          return maxLen > 0 ? l.padEnd(maxLen, " ") : l;
+      }
+    })
+    .join(eol);
+}
+
+/**
+ * Pad/align lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function padLinesLast(kind = "align-left") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to pad", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = padLinesText(src, kind);
+  if (!text) {
+    notify("Nothing to pad", { force: true });
+    return { ok: false, error: "none" };
+  }
+  if (text === src) {
+    notify("Pad made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -5781,6 +5889,24 @@ function rebuildTrayMenu() {
         { label: "Strip indent", click: () => prefixSuffixLinesLast("strip-indent") },
       ],
     },
+    {
+      label: "Pad lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Align left (pad end)", click: () => padLinesLast("align-left") },
+        { label: "Align right (pad start)", click: () => padLinesLast("align-right") },
+        { label: "Align center", click: () => padLinesLast("align-center") },
+        { label: "Left pad 2 spaces", click: () => padLinesLast("left2") },
+        { label: "Left pad 4 spaces", click: () => padLinesLast("left4") },
+        { label: "Right pad 2 spaces", click: () => padLinesLast("right2") },
+        { label: "Right pad 4 spaces", click: () => padLinesLast("right4") },
+        { label: "Zero-pad numbers 2", click: () => padLinesLast("zero2") },
+        { label: "Zero-pad numbers 3", click: () => padLinesLast("zero3") },
+        { label: "Zero-pad numbers 4", click: () => padLinesLast("zero4") },
+        { label: "Pad end to width 40", click: () => padLinesLast("width40") },
+        { label: "Pad end to width 80", click: () => padLinesLast("width80") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6149,6 +6275,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "bullet"),
       text: prefixSuffixLinesText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("pad-lines-last", (_e, kind) =>
+    padLinesLast(String(kind || "align-left"))
+  );
+  ipcMain.handle("pad-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "align-left"),
+      text: padLinesText(src, kind),
       source: src,
     };
   });

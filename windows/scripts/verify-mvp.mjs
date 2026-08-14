@@ -621,6 +621,15 @@ else fail("settings missing prefix/suffix lines last");
 if (/prefixSuffixLinesLast|prefixSuffixLinesPreview/.test(preload))
   pass("preload prefix/suffix lines last");
 else fail("preload missing prefix/suffix lines last");
+if (/padLinesLast|padLinesText|Pad lines last/.test(main))
+  pass("main pad lines last");
+else fail("main missing pad lines last");
+if (/id="padAlignLeft"|padLinesLast|Pad lines last/i.test(settings))
+  pass("settings pad lines last");
+else fail("settings missing pad lines last");
+if (/padLinesLast|padLinesPreview/.test(preload))
+  pass("preload pad lines last");
+else fail("preload missing pad lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
