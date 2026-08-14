@@ -648,6 +648,15 @@ else fail("settings missing columns last");
 if (/columnsLast|columnsPreview/.test(preload))
   pass("preload columns last");
 else fail("preload missing columns last");
+if (/whitespaceLast|whitespaceText|Whitespace last/.test(main))
+  pass("main whitespace last");
+else fail("main missing whitespace last");
+if (/id="wsCollapseSpaces"|whitespaceLast|Whitespace last/i.test(settings))
+  pass("settings whitespace last");
+else fail("settings missing whitespace last");
+if (/whitespaceLast|whitespacePreview/.test(preload))
+  pass("preload whitespace last");
+else fail("preload missing whitespace last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

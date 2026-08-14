@@ -4735,6 +4735,126 @@ function columnsLast(kind = "csv1") {
 }
 
 /**
+ * Normalize whitespace of last transcript.
+ * @param {"collapse-spaces"|"collapse-all"|"trim-lines"|"trim-all"|"trim-end"|"tabs-to-spaces2"|"tabs-to-spaces4"|"spaces-to-tabs"|"lf"|"crlf"|"strip-blank-edges"|"single-newline"} kind
+ */
+function whitespaceText(raw, kind = "collapse-spaces") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "collapse-spaces");
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+
+  switch (k) {
+    case "collapse-all":
+      // all runs of whitespace → single space; trim ends
+      return t.replace(/\s+/g, " ").trim();
+    case "trim-lines":
+      return t
+        .split(/\r\n|\r|\n/)
+        .map((l) => l.trim())
+        .join(eol);
+    case "trim-all":
+      return t
+        .split(/\r\n|\r|\n/)
+        .map((l) => l.trim())
+        .join(eol)
+        .replace(/^(\r\n|\r|\n)+|(\r\n|\r|\n)+$/g, "");
+    case "trim-end":
+      return t
+        .split(/\r\n|\r|\n/)
+        .map((l) => l.replace(/[ \t]+$/g, ""))
+        .join(eol);
+    case "tabs-to-spaces2":
+      return t.replace(/\t/g, "  ");
+    case "tabs-to-spaces4":
+      return t.replace(/\t/g, "    ");
+    case "spaces-to-tabs":
+      // leading runs of 2 or 4 spaces → tabs (prefer 4 then 2)
+      return t
+        .split(/\r\n|\r|\n/)
+        .map((l) => {
+          const m = l.match(/^( +)(.*)$/);
+          if (!m) return l;
+          let spaces = m[1].length;
+          let tabs = "";
+          while (spaces >= 4) {
+            tabs += "\t";
+            spaces -= 4;
+          }
+          while (spaces >= 2) {
+            tabs += "\t";
+            spaces -= 2;
+          }
+          return tabs + " ".repeat(spaces) + m[2];
+        })
+        .join(eol);
+    case "lf":
+      return t.replace(/\r\n|\r/g, "\n");
+    case "crlf":
+      return t.replace(/\r\n|\r|\n/g, "\r\n");
+    case "strip-blank-edges": {
+      const lines = t.split(/\r\n|\r|\n/);
+      while (lines.length && !lines[0].trim()) lines.shift();
+      while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+      return lines.join(eol);
+    }
+    case "single-newline":
+      // collapse 3+ blank lines to one blank line; keep single blanks
+      return t
+        .replace(/(?:\r\n|\r|\n){3,}/g, eol + eol)
+        .replace(/^(\r\n|\r|\n)+|(\r\n|\r|\n)+$/g, "");
+    case "collapse-spaces":
+    default:
+      // collapse runs of spaces/tabs on each line; keep newlines
+      return t
+        .split(/\r\n|\r|\n/)
+        .map((l) => l.replace(/[ \t]+/g, " ").replace(/^ | $/g, ""))
+        .join(eol);
+  }
+}
+
+/**
+ * Normalize whitespace of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function whitespaceLast(kind = "collapse-spaces") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to normalize", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = whitespaceText(src, kind);
+  if (text === src) {
+    notify("Whitespace made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6223,6 +6343,24 @@ function rebuildTrayMenu() {
         { label: "Pipe → TSV", click: () => columnsLast("pipe-to-tsv") },
       ],
     },
+    {
+      label: "Whitespace last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Collapse spaces (per line)", click: () => whitespaceLast("collapse-spaces") },
+        { label: "Collapse all → one line", click: () => whitespaceLast("collapse-all") },
+        { label: "Trim each line", click: () => whitespaceLast("trim-lines") },
+        { label: "Trim lines + edges", click: () => whitespaceLast("trim-all") },
+        { label: "Trim trailing spaces", click: () => whitespaceLast("trim-end") },
+        { label: "Tabs → 2 spaces", click: () => whitespaceLast("tabs-to-spaces2") },
+        { label: "Tabs → 4 spaces", click: () => whitespaceLast("tabs-to-spaces4") },
+        { label: "Leading spaces → tabs", click: () => whitespaceLast("spaces-to-tabs") },
+        { label: "Newlines → LF", click: () => whitespaceLast("lf") },
+        { label: "Newlines → CRLF", click: () => whitespaceLast("crlf") },
+        { label: "Strip blank edges", click: () => whitespaceLast("strip-blank-edges") },
+        { label: "Collapse blank runs", click: () => whitespaceLast("single-newline") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6630,6 +6768,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "csv1"),
       text: columnsText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("whitespace-last", (_e, kind) =>
+    whitespaceLast(String(kind || "collapse-spaces"))
+  );
+  ipcMain.handle("whitespace-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "collapse-spaces"),
+      text: whitespaceText(src, kind),
       source: src,
     };
   });

@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   truncatePreview: (kind) => ipcRenderer.invoke("truncate-preview", kind),
   columnsLast: (kind) => ipcRenderer.invoke("columns-last", kind),
   columnsPreview: (kind) => ipcRenderer.invoke("columns-preview", kind),
+  whitespaceLast: (kind) => ipcRenderer.invoke("whitespace-last", kind),
+  whitespacePreview: (kind) => ipcRenderer.invoke("whitespace-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>
