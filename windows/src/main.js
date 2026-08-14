@@ -5160,6 +5160,126 @@ function softWrapLast(kind = "w80") {
 }
 
 /**
+ * Frequency / uniqueness report for last transcript.
+ * @param {"words-top10"|"words-top25"|"words-all"|"lines-top10"|"lines-dupes"|"unique-words"|"unique-lines"|"bigrams-top10"|"chars-top10"} kind
+ */
+function frequencyText(raw, kind = "words-top10") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "words-top10");
+  const eol = "\n";
+
+  const countMap = (items) => {
+    const m = new Map();
+    for (const it of items) {
+      if (!it) continue;
+      m.set(it, (m.get(it) || 0) + 1);
+    }
+    return m;
+  };
+
+  const sortedEntries = (m) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  const formatTable = (entries, limit) => {
+    const rows = limit ? entries.slice(0, limit) : entries;
+    if (!rows.length) return "(none)";
+    const maxN = String(rows[0][1]).length;
+    return rows
+      .map(([key, n]) => `${String(n).padStart(maxN, " ")}  ${key}`)
+      .join(eol);
+  };
+
+  const words = (t.toLowerCase().match(/[^\s]+/g) || []).map((w) =>
+    w.replace(/^[^a-z0-9''-]+|[^a-z0-9''-]+$/gi, "")
+  ).filter(Boolean);
+
+  const lines = t
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  switch (k) {
+    case "words-top25":
+      return formatTable(sortedEntries(countMap(words)), 25);
+    case "words-all":
+      return formatTable(sortedEntries(countMap(words)), 0);
+    case "lines-top10":
+      return formatTable(sortedEntries(countMap(lines)), 10);
+    case "lines-dupes": {
+      const dups = sortedEntries(countMap(lines)).filter(([, n]) => n > 1);
+      return dups.length ? formatTable(dups, 0) : "(no duplicate lines)";
+    }
+    case "unique-words": {
+      const uniq = [...new Set(words)].sort((a, b) => a.localeCompare(b));
+      return uniq.length ? uniq.join(eol) : "(none)";
+    }
+    case "unique-lines": {
+      const uniq = [...new Set(lines)];
+      return uniq.length ? uniq.join(eol) : "(none)";
+    }
+    case "bigrams-top10": {
+      const grams = [];
+      for (let i = 0; i < words.length - 1; i++) {
+        grams.push(`${words[i]} ${words[i + 1]}`);
+      }
+      return formatTable(sortedEntries(countMap(grams)), 10);
+    }
+    case "chars-top10": {
+      const chars = t
+        .replace(/\s/g, "")
+        .split("")
+        .filter(Boolean);
+      return formatTable(sortedEntries(countMap(chars)), 10);
+    }
+    case "words-top10":
+    default:
+      return formatTable(sortedEntries(countMap(words)), 10);
+  }
+}
+
+/**
+ * Frequency report for last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function frequencyLast(kind = "words-top10") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to analyze", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = frequencyText(src, kind);
+  if (!String(text || "").length) {
+    notify("Nothing to count", { force: true });
+    return { ok: false, error: "none" };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6696,6 +6816,21 @@ function rebuildTrayMenu() {
         { label: "Unwrap paragraphs", click: () => softWrapLast("unwrap") },
       ],
     },
+    {
+      label: "Frequency last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Words · top 10", click: () => frequencyLast("words-top10") },
+        { label: "Words · top 25", click: () => frequencyLast("words-top25") },
+        { label: "Words · all", click: () => frequencyLast("words-all") },
+        { label: "Lines · top 10", click: () => frequencyLast("lines-top10") },
+        { label: "Duplicate lines only", click: () => frequencyLast("lines-dupes") },
+        { label: "Unique words (A–Z)", click: () => frequencyLast("unique-words") },
+        { label: "Unique lines (order kept)", click: () => frequencyLast("unique-lines") },
+        { label: "Bigrams · top 10", click: () => frequencyLast("bigrams-top10") },
+        { label: "Characters · top 10", click: () => frequencyLast("chars-top10") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7142,6 +7277,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "w80"),
       text: softWrapText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("frequency-last", (_e, kind) =>
+    frequencyLast(String(kind || "words-top10"))
+  );
+  ipcMain.handle("frequency-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "words-top10"),
+      text: frequencyText(src, kind),
       source: src,
     };
   });

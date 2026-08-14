@@ -378,6 +378,19 @@
     <button type="button" id="swUnwrap" class="ghost">Unwrap</button>
   </div>
 
+  <label>Frequency last <span style="font-weight:400;color:var(--muted)">(words · lines · unique · bigrams · chars · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="freqWords10" class="ghost">Words top 10</button>
+    <button type="button" id="freqWords25" class="ghost">Words top 25</button>
+    <button type="button" id="freqWordsAll" class="ghost">Words all</button>
+    <button type="button" id="freqLines10" class="ghost">Lines top 10</button>
+    <button type="button" id="freqLinesDupes" class="ghost">Dup lines</button>
+    <button type="button" id="freqUniqueWords" class="ghost">Unique words</button>
+    <button type="button" id="freqUniqueLines" class="ghost">Unique lines</button>
+    <button type="button" id="freqBigrams" class="ghost">Bigrams top 10</button>
+    <button type="button" id="freqChars" class="ghost">Chars top 10</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1582,6 +1595,23 @@
     document.getElementById('sw120').onclick = () => softWrapNow('w120');
     document.getElementById('swIndent80').onclick = () => softWrapNow('indent-w80');
     document.getElementById('swUnwrap').onclick = () => softWrapNow('unwrap');
+    async function frequencyNow(kind) {
+      const r = await window.dictaste.frequencyLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : '')))
+        : (r?.error || 'Frequency failed');
+      if (r?.text != null && r?.ok) document.getElementById('text').value = r.text;
+      if (r?.ok) renderHistory().catch(() => {});
+    }
+    document.getElementById('freqWords10').onclick = () => frequencyNow('words-top10');
+    document.getElementById('freqWords25').onclick = () => frequencyNow('words-top25');
+    document.getElementById('freqWordsAll').onclick = () => frequencyNow('words-all');
+    document.getElementById('freqLines10').onclick = () => frequencyNow('lines-top10');
+    document.getElementById('freqLinesDupes').onclick = () => frequencyNow('lines-dupes');
+    document.getElementById('freqUniqueWords').onclick = () => frequencyNow('unique-words');
+    document.getElementById('freqUniqueLines').onclick = () => frequencyNow('unique-lines');
+    document.getElementById('freqBigrams').onclick = () => frequencyNow('bigrams-top10');
+    document.getElementById('freqChars').onclick = () => frequencyNow('chars-top10');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

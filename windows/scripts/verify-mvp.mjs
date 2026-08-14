@@ -675,6 +675,15 @@ else fail("settings missing soft wrap last");
 if (/softWrapLast|softWrapPreview/.test(preload))
   pass("preload soft wrap last");
 else fail("preload missing soft wrap last");
+if (/frequencyLast|frequencyText|Frequency last/.test(main))
+  pass("main frequency last");
+else fail("main missing frequency last");
+if (/id="freqWords10"|frequencyLast|Frequency last/i.test(settings))
+  pass("settings frequency last");
+else fail("settings missing frequency last");
+if (/frequencyLast|frequencyPreview/.test(preload))
+  pass("preload frequency last");
+else fail("preload missing frequency last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
