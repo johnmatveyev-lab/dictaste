@@ -46,6 +46,7 @@
  * - Smart quotes / em dash + compact HUD
  * - Word-count toast + import history
  * - Skip polish under N words + open data folder + reset hotkeys
+ * - Indent last (indent/outdent · tabs↔spaces · strip common · blockquote)
  */
 const {
   app,
@@ -5408,6 +5409,145 @@ function redactLast(kind = "all") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+
+/**
+ * Indent / outdent / normalize indentation of last transcript lines.
+ * @param {"indent-2"|"indent-4"|"indent-tab"|"outdent-2"|"outdent-4"|"outdent-tab"|"tabs-to-2"|"tabs-to-4"|"spaces-to-tabs-2"|"spaces-to-tabs-4"|"strip-common"|"blockquote"} kind
+ */
+function indentText(raw, kind = "indent-2") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "indent-2");
+  const lines = t.split(/\r\n|\r|\n/);
+  const endsWithNl = /\r?\n$/.test(t);
+
+  const mapLines = (fn) => {
+    const out = lines.map(fn);
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  switch (k) {
+    case "indent-4":
+      return mapLines((l) => (l.length ? "    " + l : l));
+    case "indent-tab":
+      return mapLines((l) => (l.length ? "\t" + l : l));
+    case "outdent-2":
+      return mapLines((l) => {
+        if (l.startsWith("\t")) return l.slice(1);
+        if (l.startsWith("  ")) return l.slice(2);
+        if (l.startsWith(" ")) return l.slice(1);
+        return l;
+      });
+    case "outdent-4":
+      return mapLines((l) => {
+        if (l.startsWith("\t")) return l.slice(1);
+        if (l.startsWith("    ")) return l.slice(4);
+        if (l.startsWith("   ")) return l.slice(3);
+        if (l.startsWith("  ")) return l.slice(2);
+        if (l.startsWith(" ")) return l.slice(1);
+        return l;
+      });
+    case "outdent-tab":
+      return mapLines((l) => (l.startsWith("\t") ? l.slice(1) : l));
+    case "tabs-to-2":
+      return mapLines((l) => {
+        let i = 0;
+        while (i < l.length && l[i] === "\t") i++;
+        return "  ".repeat(i) + l.slice(i);
+      });
+    case "tabs-to-4":
+      return mapLines((l) => {
+        let i = 0;
+        while (i < l.length && l[i] === "\t") i++;
+        return "    ".repeat(i) + l.slice(i);
+      });
+    case "spaces-to-tabs-2":
+      return mapLines((l) => {
+        const m = l.match(/^( *)/);
+        const n = m ? m[1].length : 0;
+        const tabs = Math.floor(n / 2);
+        const rem = n % 2;
+        return "\t".repeat(tabs) + " ".repeat(rem) + l.slice(n);
+      });
+    case "spaces-to-tabs-4":
+      return mapLines((l) => {
+        const m = l.match(/^( *)/);
+        const n = m ? m[1].length : 0;
+        const tabs = Math.floor(n / 4);
+        const rem = n % 4;
+        return "\t".repeat(tabs) + " ".repeat(rem) + l.slice(n);
+      });
+    case "strip-common": {
+      const nonEmpty = lines.filter((l) => l.length > 0);
+      if (!nonEmpty.length) return t;
+      let common = null;
+      for (const l of nonEmpty) {
+        const m = l.match(/^[\t ]*/);
+        const ind = m ? m[0] : "";
+        if (common === null) common = ind;
+        else {
+          let i = 0;
+          while (i < common.length && i < ind.length && common[i] === ind[i]) i++;
+          common = common.slice(0, i);
+        }
+        if (!common.length) break;
+      }
+      if (!common || !common.length) return t;
+      return mapLines((l) =>
+        l.length && l.startsWith(common) ? l.slice(common.length) : l
+      );
+    }
+    case "blockquote":
+      return mapLines((l) => (l.length ? "> " + l : l));
+    case "indent-2":
+    default:
+      return mapLines((l) => (l.length ? "  " + l : l));
+  }
+}
+
+/**
+ * Indent last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function indentLast(kind = "indent-2") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to indent", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = indentText(src, kind);
+  if (text === src) {
+    notify("Indent made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -6975,6 +7115,24 @@ function rebuildTrayMenu() {
         { label: "Keep last 4 (card/phone/SSN)", click: () => redactLast("keep-last4") },
       ],
     },
+    {
+      label: "Indent last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Indent 2 spaces", click: () => indentLast("indent-2") },
+        { label: "Indent 4 spaces", click: () => indentLast("indent-4") },
+        { label: "Indent tab", click: () => indentLast("indent-tab") },
+        { label: "Outdent 2 spaces", click: () => indentLast("outdent-2") },
+        { label: "Outdent 4 spaces", click: () => indentLast("outdent-4") },
+        { label: "Outdent tab", click: () => indentLast("outdent-tab") },
+        { label: "Tabs → 2 spaces", click: () => indentLast("tabs-to-2") },
+        { label: "Tabs → 4 spaces", click: () => indentLast("tabs-to-4") },
+        { label: "Spaces → tabs (2)", click: () => indentLast("spaces-to-tabs-2") },
+        { label: "Spaces → tabs (4)", click: () => indentLast("spaces-to-tabs-4") },
+        { label: "Strip common indent", click: () => indentLast("strip-common") },
+        { label: "Blockquote (> )", click: () => indentLast("blockquote") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7447,6 +7605,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "all"),
       text: redactText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("indent-last", (_e, kind) =>
+    indentLast(String(kind || "indent-2"))
+  );
+  ipcMain.handle("indent-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "indent-2"),
+      text: indentText(src, kind),
       source: src,
     };
   });

@@ -63,6 +63,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   frequencyPreview: (kind) => ipcRenderer.invoke("frequency-preview", kind),
   redactLast: (kind) => ipcRenderer.invoke("redact-last", kind),
   redactPreview: (kind) => ipcRenderer.invoke("redact-preview", kind),
+  indentLast: (kind) => ipcRenderer.invoke("indent-last", kind),
+  indentPreview: (kind) => ipcRenderer.invoke("indent-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

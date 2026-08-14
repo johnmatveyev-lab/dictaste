@@ -693,6 +693,16 @@ else fail("settings missing redact last");
 if (/redactLast|redactPreview/.test(preload))
   pass("preload redact last");
 else fail("preload missing redact last");
+
+if (/indentLast|indentText|Indent last/.test(main))
+  pass("main indent last");
+else fail("main missing indent last");
+if (/id="indent2"|indentLast|Indent last/i.test(settings))
+  pass("settings indent last");
+else fail("settings missing indent last");
+if (/indentLast|indentPreview/.test(preload))
+  pass("preload indent last");
+else fail("preload missing indent last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
