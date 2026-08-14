@@ -352,6 +352,20 @@
     <button type="button" id="wsSingleNl" class="ghost">Blank runs</button>
   </div>
 
+  <label>Rotate lines last <span style="font-weight:400;color:var(--muted)">(first/last · up/down · halves · odds/evens · blanks · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="rotFirstEnd" class="ghost">First→end</button>
+    <button type="button" id="rotLastStart" class="ghost">Last→start</button>
+    <button type="button" id="rotUp" class="ghost">Up</button>
+    <button type="button" id="rotDown" class="ghost">Down</button>
+    <button type="button" id="rotSwap" class="ghost">Swap halves</button>
+    <button type="button" id="rotInterleave" class="ghost">Interleave</button>
+    <button type="button" id="rotOdds" class="ghost">Odds first</button>
+    <button type="button" id="rotEvens" class="ghost">Evens first</button>
+    <button type="button" id="rotBlankEnd" class="ghost">Blanks→end</button>
+    <button type="button" id="rotBlankStart" class="ghost">Blanks→start</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1522,6 +1536,24 @@
     document.getElementById('wsCrlf').onclick = () => whitespaceNow('crlf');
     document.getElementById('wsStripEdges').onclick = () => whitespaceNow('strip-blank-edges');
     document.getElementById('wsSingleNl').onclick = () => whitespaceNow('single-newline');
+    async function rotateLinesNow(kind) {
+      const r = await window.dictaste.rotateLinesLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Rotate failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('rotFirstEnd').onclick = () => rotateLinesNow('first-to-end');
+    document.getElementById('rotLastStart').onclick = () => rotateLinesNow('last-to-start');
+    document.getElementById('rotUp').onclick = () => rotateLinesNow('up');
+    document.getElementById('rotDown').onclick = () => rotateLinesNow('down');
+    document.getElementById('rotSwap').onclick = () => rotateLinesNow('swap-halves');
+    document.getElementById('rotInterleave').onclick = () => rotateLinesNow('interleave');
+    document.getElementById('rotOdds').onclick = () => rotateLinesNow('odds-first');
+    document.getElementById('rotEvens').onclick = () => rotateLinesNow('evens-first');
+    document.getElementById('rotBlankEnd').onclick = () => rotateLinesNow('move-blank-end');
+    document.getElementById('rotBlankStart').onclick = () => rotateLinesNow('move-blank-start');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

@@ -657,6 +657,15 @@ else fail("settings missing whitespace last");
 if (/whitespaceLast|whitespacePreview/.test(preload))
   pass("preload whitespace last");
 else fail("preload missing whitespace last");
+if (/rotateLinesLast|rotateLinesText|Rotate lines last/.test(main))
+  pass("main rotate lines last");
+else fail("main missing rotate lines last");
+if (/id="rotFirstEnd"|rotateLinesLast|Rotate lines last/i.test(settings))
+  pass("settings rotate lines last");
+else fail("settings missing rotate lines last");
+if (/rotateLinesLast|rotateLinesPreview/.test(preload))
+  pass("preload rotate lines last");
+else fail("preload missing rotate lines last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

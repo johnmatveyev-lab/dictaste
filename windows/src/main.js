@@ -4855,6 +4855,132 @@ function whitespaceLast(kind = "collapse-spaces") {
 }
 
 /**
+ * Rotate / reorder lines of last transcript.
+ * @param {"first-to-end"|"last-to-start"|"up"|"down"|"swap-halves"|"interleave"|"odds-first"|"evens-first"|"move-blank-end"|"move-blank-start"} kind
+ */
+function rotateLinesText(raw, kind = "first-to-end") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const eol = t.includes("\r\n") ? "\r\n" : t.includes("\r") ? "\r" : "\n";
+  const lines = t.split(/\r\n|\r|\n/);
+  if (lines.length <= 1) return t;
+  const k = String(kind || "first-to-end");
+  let out = lines.slice();
+
+  switch (k) {
+    case "last-to-start": {
+      const last = out.pop();
+      out.unshift(last);
+      break;
+    }
+    case "up": {
+      // rotate toward start: each line moves up, first becomes last
+      out.push(out.shift());
+      break;
+    }
+    case "down": {
+      // rotate toward end: each line moves down, last becomes first
+      out.unshift(out.pop());
+      break;
+    }
+    case "swap-halves": {
+      const mid = Math.floor(out.length / 2);
+      out = out.slice(mid).concat(out.slice(0, mid));
+      break;
+    }
+    case "interleave": {
+      // first half interleave with second half (A1 B1 A2 B2 …)
+      const mid = Math.ceil(out.length / 2);
+      const a = out.slice(0, mid);
+      const b = out.slice(mid);
+      const merged = [];
+      const n = Math.max(a.length, b.length);
+      for (let i = 0; i < n; i++) {
+        if (i < a.length) merged.push(a[i]);
+        if (i < b.length) merged.push(b[i]);
+      }
+      out = merged;
+      break;
+    }
+    case "odds-first": {
+      // 1-based odds then evens (keep blanks in place by index)
+      const odds = [];
+      const evens = [];
+      out.forEach((l, i) => ((i % 2 === 0 ? odds : evens).push(l)));
+      out = odds.concat(evens);
+      break;
+    }
+    case "evens-first": {
+      const odds = [];
+      const evens = [];
+      out.forEach((l, i) => ((i % 2 === 0 ? odds : evens).push(l)));
+      out = evens.concat(odds);
+      break;
+    }
+    case "move-blank-end": {
+      const non = out.filter((l) => String(l || "").trim().length > 0);
+      const blank = out.filter((l) => !String(l || "").trim().length);
+      out = non.concat(blank);
+      break;
+    }
+    case "move-blank-start": {
+      const non = out.filter((l) => String(l || "").trim().length > 0);
+      const blank = out.filter((l) => !String(l || "").trim().length);
+      out = blank.concat(non);
+      break;
+    }
+    case "first-to-end":
+    default: {
+      const first = out.shift();
+      out.push(first);
+      break;
+    }
+  }
+  return out.join(eol);
+}
+
+/**
+ * Rotate/reorder lines of last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function rotateLinesLast(kind = "first-to-end") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to rotate", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = rotateLinesText(src, kind);
+  if (text === src) {
+    notify("Rotate made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6361,6 +6487,22 @@ function rebuildTrayMenu() {
         { label: "Collapse blank runs", click: () => whitespaceLast("single-newline") },
       ],
     },
+    {
+      label: "Rotate lines last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "First → end", click: () => rotateLinesLast("first-to-end") },
+        { label: "Last → start", click: () => rotateLinesLast("last-to-start") },
+        { label: "Rotate up", click: () => rotateLinesLast("up") },
+        { label: "Rotate down", click: () => rotateLinesLast("down") },
+        { label: "Swap halves", click: () => rotateLinesLast("swap-halves") },
+        { label: "Interleave halves", click: () => rotateLinesLast("interleave") },
+        { label: "Odds first", click: () => rotateLinesLast("odds-first") },
+        { label: "Evens first", click: () => rotateLinesLast("evens-first") },
+        { label: "Blanks → end", click: () => rotateLinesLast("move-blank-end") },
+        { label: "Blanks → start", click: () => rotateLinesLast("move-blank-start") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -6781,6 +6923,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "collapse-spaces"),
       text: whitespaceText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("rotate-lines-last", (_e, kind) =>
+    rotateLinesLast(String(kind || "first-to-end"))
+  );
+  ipcMain.handle("rotate-lines-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "first-to-end"),
+      text: rotateLinesText(src, kind),
       source: src,
     };
   });
