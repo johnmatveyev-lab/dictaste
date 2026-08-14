@@ -420,6 +420,16 @@
     <button type="button" id="blockquote" class="ghost">Blockquote</button>
   </div>
 
+  <label>Reverse last <span style="font-weight:400;color:var(--muted)">(lines · words · chars · words/line · sentences · paragraphs · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="revLines" class="ghost">Lines</button>
+    <button type="button" id="revWords" class="ghost">Words</button>
+    <button type="button" id="revChars" class="ghost">Chars</button>
+    <button type="button" id="revWordsLine" class="ghost">Words/line</button>
+    <button type="button" id="revSentences" class="ghost">Sentences</button>
+    <button type="button" id="revParagraphs" class="ghost">Paragraphs</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1676,6 +1686,18 @@
     document.getElementById('spacesToTabs4').onclick = () => indentNow('spaces-to-tabs-4');
     document.getElementById('stripCommon').onclick = () => indentNow('strip-common');
     document.getElementById('blockquote').onclick = () => indentNow('blockquote');
+    async function reverseNow(kind) {
+      const r = await window.dictaste.reverseLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Reverse: no changes' : ('Reverse · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Reverse failed');
+    }
+    document.getElementById('revLines').onclick = () => reverseNow('lines');
+    document.getElementById('revWords').onclick = () => reverseNow('words');
+    document.getElementById('revChars').onclick = () => reverseNow('chars');
+    document.getElementById('revWordsLine').onclick = () => reverseNow('words-per-line');
+    document.getElementById('revSentences').onclick = () => reverseNow('sentences');
+    document.getElementById('revParagraphs').onclick = () => reverseNow('paragraphs');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

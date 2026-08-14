@@ -703,6 +703,16 @@ else fail("settings missing indent last");
 if (/indentLast|indentPreview/.test(preload))
   pass("preload indent last");
 else fail("preload missing indent last");
+
+if (/reverseLast|reverseText|Reverse last/.test(main))
+  pass("main reverse last");
+else fail("main missing reverse last");
+if (/id="revLines"|reverseLast|Reverse last/i.test(settings))
+  pass("settings reverse last");
+else fail("settings missing reverse last");
+if (/reverseLast|reversePreview/.test(preload))
+  pass("preload reverse last");
+else fail("preload missing reverse last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

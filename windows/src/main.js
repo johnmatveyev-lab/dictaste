@@ -47,6 +47,7 @@
  * - Word-count toast + import history
  * - Skip polish under N words + open data folder + reset hotkeys
  * - Indent last (indent/outdent · tabs↔spaces · strip common · blockquote)
+ * - Reverse last (lines · words · chars · words/line · sentences)
  */
 const {
   app,
@@ -5548,6 +5549,123 @@ function indentLast(kind = "indent-2") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+
+/**
+ * Reverse lines / words / characters of last transcript.
+ * @param {"lines"|"words"|"chars"|"words-per-line"|"sentences"|"paragraphs"} kind
+ */
+function reverseText(raw, kind = "lines") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "lines");
+  const endsWithNl = /\r?\n$/.test(t);
+
+  switch (k) {
+    case "words": {
+      // Split on whitespace but preserve trailing structure via join space
+      const parts = t.trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return t;
+      return parts.reverse().join(" ");
+    }
+    case "chars": {
+      // Reverse full string code units (simple; good enough for ASCII dictation)
+      return Array.from(t).reverse().join("");
+    }
+    case "words-per-line": {
+      const lines = t.split(/\r\n|\r|\n/);
+      const out = lines.map((l) => {
+        if (!l.trim()) return l;
+        const lead = (l.match(/^[\t ]*/) || [""])[0];
+        const trail = (l.match(/[\t ]*$/) || [""])[0];
+        const core = l.slice(lead.length, l.length - trail.length || undefined);
+        // fix empty trail edge: if all spaces, leave
+        const body = l.trim();
+        if (!body) return l;
+        const words = body.split(/\s+/).filter(Boolean);
+        return lead + words.reverse().join(" ");
+      });
+      let s = out.join("\n");
+      if (endsWithNl && !s.endsWith("\n")) s += "\n";
+      return s;
+    }
+    case "sentences": {
+      // Split on sentence-ending punctuation, keep delimiters
+      const parts = [];
+      const re = /[^.!?]+[.!?]+[\s"]*|[^.!?]+$/g;
+      let m;
+      const src = t.trim();
+      while ((m = re.exec(src)) !== null) {
+        const p = m[0].trim();
+        if (p) parts.push(p);
+      }
+      if (parts.length <= 1) return t.trim();
+      return parts.reverse().join(" ");
+    }
+    case "paragraphs": {
+      // Split on blank lines
+      const blocks = t.split(/\n\s*\n/);
+      const out = blocks.map((b) => b).reverse();
+      return out.join("\n\n");
+    }
+    case "lines":
+    default: {
+      const lines = t.split(/\r\n|\r|\n/);
+      // preserve trailing empty from endsWithNl: split keeps it as trailing ''
+      let arr = lines;
+      let trailing = false;
+      if (endsWithNl && arr.length && arr[arr.length - 1] === "") {
+        arr = arr.slice(0, -1);
+        trailing = true;
+      }
+      arr = arr.reverse();
+      let s = arr.join("\n");
+      if (trailing) s += "\n";
+      return s;
+    }
+  }
+}
+
+/**
+ * Reverse last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function reverseLast(kind = "lines") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to reverse", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = reverseText(src, kind);
+  if (text === src) {
+    notify("Reverse made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -7133,6 +7251,18 @@ function rebuildTrayMenu() {
         { label: "Blockquote (> )", click: () => indentLast("blockquote") },
       ],
     },
+    {
+      label: "Reverse last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Reverse lines", click: () => reverseLast("lines") },
+        { label: "Reverse words", click: () => reverseLast("words") },
+        { label: "Reverse characters", click: () => reverseLast("chars") },
+        { label: "Reverse words per line", click: () => reverseLast("words-per-line") },
+        { label: "Reverse sentences", click: () => reverseLast("sentences") },
+        { label: "Reverse paragraphs", click: () => reverseLast("paragraphs") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7618,6 +7748,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "indent-2"),
       text: indentText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("reverse-last", (_e, kind) =>
+    reverseLast(String(kind || "lines"))
+  );
+  ipcMain.handle("reverse-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "lines"),
+      text: reverseText(src, kind),
       source: src,
     };
   });
