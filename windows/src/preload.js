@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   indentPreview: (kind) => ipcRenderer.invoke("indent-preview", kind),
   reverseLast: (kind) => ipcRenderer.invoke("reverse-last", kind),
   reversePreview: (kind) => ipcRenderer.invoke("reverse-preview", kind),
+  checklistLast: (kind) => ipcRenderer.invoke("checklist-last", kind),
+  checklistPreview: (kind) => ipcRenderer.invoke("checklist-preview", kind),
   copyLastTranscript: (index, opts) =>
     ipcRenderer.invoke("copy-last-transcript", index, opts || {}),
   pasteLastTranscript: (index, opts) =>

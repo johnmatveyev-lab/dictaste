@@ -713,6 +713,15 @@ else fail("settings missing reverse last");
 if (/reverseLast|reversePreview/.test(preload))
   pass("preload reverse last");
 else fail("preload missing reverse last");
+if (/checklistLast|checklistText|Checklist last/.test(main))
+  pass("main checklist last");
+else fail("main missing checklist last");
+if (/id="clUnchecked"|checklistLast|Checklist last/i.test(settings))
+  pass("settings checklist last");
+else fail("settings missing checklist last");
+if (/checklistLast|checklistPreview/.test(preload))
+  pass("preload checklist last");
+else fail("preload missing checklist last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

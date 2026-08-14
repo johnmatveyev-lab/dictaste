@@ -430,6 +430,18 @@
     <button type="button" id="revParagraphs" class="ghost">Paragraphs</button>
   </div>
 
+  <label>Checklist last <span style="font-weight:400;color:var(--muted)">(tasks [ ]/[x] · toggle · strip · numbered · bullets · progress · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="clUnchecked" class="ghost">Tasks [ ]</button>
+    <button type="button" id="clChecked" class="ghost">Tasks [x]</button>
+    <button type="button" id="clToggle" class="ghost">Toggle</button>
+    <button type="button" id="clStrip" class="ghost">Strip</button>
+    <button type="button" id="clNumbered" class="ghost">Numbered</button>
+    <button type="button" id="clBulletsTasks" class="ghost">Bullets→tasks</button>
+    <button type="button" id="clTasksBullets" class="ghost">Tasks→bullets</button>
+    <button type="button" id="clProgress" class="ghost">Progress</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1698,6 +1710,20 @@
     document.getElementById('revWordsLine').onclick = () => reverseNow('words-per-line');
     document.getElementById('revSentences').onclick = () => reverseNow('sentences');
     document.getElementById('revParagraphs').onclick = () => reverseNow('paragraphs');
+    async function checklistNow(kind) {
+      const r = await window.dictaste.checklistLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Checklist: no changes' : ('Checklist · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Checklist failed');
+    }
+    document.getElementById('clUnchecked').onclick = () => checklistNow('unchecked');
+    document.getElementById('clChecked').onclick = () => checklistNow('checked');
+    document.getElementById('clToggle').onclick = () => checklistNow('toggle');
+    document.getElementById('clStrip').onclick = () => checklistNow('strip');
+    document.getElementById('clNumbered').onclick = () => checklistNow('numbered');
+    document.getElementById('clBulletsTasks').onclick = () => checklistNow('bullets-to-tasks');
+    document.getElementById('clTasksBullets').onclick = () => checklistNow('tasks-to-bullets');
+    document.getElementById('clProgress').onclick = () => checklistNow('progress');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

@@ -48,6 +48,7 @@
  * - Skip polish under N words + open data folder + reset hotkeys
  * - Indent last (indent/outdent · tabs↔spaces · strip common · blockquote)
  * - Reverse last (lines · words · chars · words/line · sentences)
+ * - Checklist last (markdown tasks · toggle · strip · numbered)
  */
 const {
   app,
@@ -5666,6 +5667,181 @@ function reverseLast(kind = "lines") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+
+/**
+ * Convert last transcript lines to/from checklist / task formats.
+ * @param {"unchecked"|"checked"|"toggle"|"strip"|"numbered"|"bullets-to-tasks"|"tasks-to-bullets"|"progress"} kind
+ */
+function checklistText(raw, kind = "unchecked") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "unchecked");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+
+  const taskRe = /^(\s*)(?:[-*+]|\d+\.)\s+\[([ xX])\]\s+(.*)$/;
+  const bulletRe = /^(\s*)([-*+])\s+(.*)$/;
+  const numRe = /^(\s*)(\d+)\.\s+(.*)$/;
+  const plainRe = /^(\s*)(.*)$/;
+
+  const mapLines = (fn) => {
+    const out = lines.map(fn);
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  switch (k) {
+    case "checked":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) return `${m[1]}- [x] ${m[3]}`;
+        const b = l.match(bulletRe);
+        if (b) return `${b[1]}- [x] ${b[3]}`;
+        const n = l.match(numRe);
+        if (n) return `${n[1]}- [x] ${n[3]}`;
+        const p = l.match(plainRe);
+        return `${p[1]}- [x] ${p[2]}`;
+      });
+    case "toggle":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) {
+          const mark = m[2].toLowerCase() === "x" ? " " : "x";
+          return `${m[1]}- [${mark}] ${m[3]}`;
+        }
+        const b = l.match(bulletRe);
+        if (b) return `${b[1]}- [ ] ${b[3]}`;
+        const n = l.match(numRe);
+        if (n) return `${n[1]}- [ ] ${n[3]}`;
+        const p = l.match(plainRe);
+        return `${p[1]}- [ ] ${p[2]}`;
+      });
+    case "strip":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) return `${m[1]}${m[3]}`;
+        return l;
+      });
+    case "numbered": {
+      let i = 0;
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        i += 1;
+        const m = l.match(taskRe);
+        if (m) return `${m[1]}${i}. ${m[3]}`;
+        const b = l.match(bulletRe);
+        if (b) return `${b[1]}${i}. ${b[3]}`;
+        const n = l.match(numRe);
+        if (n) return `${n[1]}${i}. ${n[3]}`;
+        const p = l.match(plainRe);
+        return `${p[1]}${i}. ${p[2]}`;
+      });
+    }
+    case "bullets-to-tasks":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) return l; // already
+        const b = l.match(bulletRe);
+        if (b) return `${b[1]}- [ ] ${b[3]}`;
+        const n = l.match(numRe);
+        if (n) return `${n[1]}- [ ] ${n[3]}`;
+        return l;
+      });
+    case "tasks-to-bullets":
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) return `${m[1]}- ${m[3]}`;
+        return l;
+      });
+    case "progress": {
+      let total = 0;
+      let done = 0;
+      for (const l of lines) {
+        const m = l.match(taskRe);
+        if (m) {
+          total += 1;
+          if (m[2].toLowerCase() === "x") done += 1;
+        }
+      }
+      // If no tasks yet, treat non-empty lines as unchecked tasks for count
+      if (total === 0) {
+        const nonEmpty = lines.filter((l) => l.trim()).length;
+        const header = `Checklist progress: 0/${nonEmpty} (0%) — convert to tasks first`;
+        return header + (t.startsWith(header) ? "" : "\n" + t);
+      }
+      const pct = Math.round((done / total) * 100);
+      const header = `Checklist progress: ${done}/${total} (${pct}%)`;
+      // Replace existing progress header if present
+      const bodyLines = lines.filter((l) => !/^Checklist progress:/i.test(l.trim()));
+      let body = bodyLines.join("\n");
+      if (endsWithNl && !body.endsWith("\n") && bodyLines.length) {
+        /* keep below */
+      }
+      return header + "\n" + bodyLines.join("\n") + (endsWithNl ? "\n" : "");
+    }
+    case "unchecked":
+    default:
+      return mapLines((l) => {
+        if (!l.trim()) return l;
+        const m = l.match(taskRe);
+        if (m) return `${m[1]}- [ ] ${m[3]}`;
+        const b = l.match(bulletRe);
+        if (b) return `${b[1]}- [ ] ${b[3]}`;
+        const n = l.match(numRe);
+        if (n) return `${n[1]}- [ ] ${n[3]}`;
+        const p = l.match(plainRe);
+        return `${p[1]}- [ ] ${p[2]}`;
+      });
+  }
+}
+
+/**
+ * Checklist-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function checklistLast(kind = "unchecked") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for checklist", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = checklistText(src, kind);
+  if (text === src) {
+    notify("Checklist made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
@@ -7263,6 +7439,20 @@ function rebuildTrayMenu() {
         { label: "Reverse paragraphs", click: () => reverseLast("paragraphs") },
       ],
     },
+    {
+      label: "Checklist last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "To tasks [ ]", click: () => checklistLast("unchecked") },
+        { label: "To tasks [x]", click: () => checklistLast("checked") },
+        { label: "Toggle checked", click: () => checklistLast("toggle") },
+        { label: "Strip task markers", click: () => checklistLast("strip") },
+        { label: "Numbered list", click: () => checklistLast("numbered") },
+        { label: "Bullets → tasks", click: () => checklistLast("bullets-to-tasks") },
+        { label: "Tasks → bullets", click: () => checklistLast("tasks-to-bullets") },
+        { label: "Progress summary", click: () => checklistLast("progress") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7761,6 +7951,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "lines"),
       text: reverseText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("checklist-last", (_e, kind) =>
+    checklistLast(String(kind || "unchecked"))
+  );
+  ipcMain.handle("checklist-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "unchecked"),
+      text: checklistText(src, kind),
       source: src,
     };
   });
