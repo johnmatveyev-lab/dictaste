@@ -50,6 +50,7 @@
  * - Reverse last (lines · words · chars · words/line · sentences)
  * - Checklist last (markdown tasks · toggle · strip · numbered)
  * - Markdown last (strip · bold/italic · code · headers · links)
+ * - Unique last (dedupe lines · case-insensitive · words · counts)
  */
 const {
   app,
@@ -6020,6 +6021,178 @@ function markdownLast(kind = "strip") {
 }
 
 /**
+ * Deduplicate last transcript.
+ * @param {"first"|"last"|"ci"|"trim"|"sort"|"words"|"count"|"dups-only"|"drop-blanks"} kind
+ */
+function uniqueText(raw, kind = "first") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "first");
+  const endsWithNl = /\r?\n$/.test(t);
+  const lines = t.split(/\r\n|\r|\n/);
+  const finish = (arr) => {
+    let s = arr.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  switch (k) {
+    case "last": {
+      const seen = new Set();
+      const rev = [];
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const l = lines[i];
+        if (seen.has(l)) continue;
+        seen.add(l);
+        rev.push(l);
+      }
+      return finish(rev.reverse());
+    }
+    case "ci": {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        const key = l.toLocaleLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(l);
+      }
+      return finish(out);
+    }
+    case "trim": {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        const trimmed = l.trim();
+        if (!trimmed) {
+          if (!seen.has("\0blank")) {
+            seen.add("\0blank");
+            out.push("");
+          }
+          continue;
+        }
+        if (seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        out.push(trimmed);
+      }
+      return finish(out);
+    }
+    case "sort": {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        if (seen.has(l)) continue;
+        seen.add(l);
+        out.push(l);
+      }
+      const blanks = out.filter((l) => !l.trim());
+      const rest = out.filter((l) => l.trim());
+      rest.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
+      return finish([...rest, ...blanks]);
+    }
+    case "words": {
+      const words = t.split(/\s+/).filter((w) => w.length > 0);
+      const seen = new Set();
+      const out = [];
+      for (const w of words) {
+        const key = w.toLocaleLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(w);
+      }
+      return out.join(" ");
+    }
+    case "count": {
+      const counts = new Map();
+      const order = [];
+      for (const l of lines) {
+        if (!counts.has(l)) {
+          counts.set(l, 0);
+          order.push(l);
+        }
+        counts.set(l, counts.get(l) + 1);
+      }
+      return finish(order.map((l) => `${counts.get(l)}× ${l}`));
+    }
+    case "dups-only": {
+      const counts = new Map();
+      const order = [];
+      for (const l of lines) {
+        if (!counts.has(l)) {
+          counts.set(l, 0);
+          order.push(l);
+        }
+        counts.set(l, counts.get(l) + 1);
+      }
+      return finish(order.filter((l) => counts.get(l) > 1));
+    }
+    case "drop-blanks": {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        if (!l.trim()) continue;
+        if (seen.has(l)) continue;
+        seen.add(l);
+        out.push(l);
+      }
+      return finish(out);
+    }
+    case "first":
+    default: {
+      const seen = new Set();
+      const out = [];
+      for (const l of lines) {
+        if (seen.has(l)) continue;
+        seen.add(l);
+        out.push(l);
+      }
+      return finish(out);
+    }
+  }
+}
+
+/**
+ * Unique-transform last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function uniqueLast(kind = "first") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to unique", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = uniqueText(src, kind);
+  if (text === src) {
+    notify("Unique made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -7650,6 +7823,21 @@ function rebuildTrayMenu() {
         { label: "Escape specials", click: () => markdownLast("escape") },
       ],
     },
+    {
+      label: "Unique last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Keep first", click: () => uniqueLast("first") },
+        { label: "Keep last", click: () => uniqueLast("last") },
+        { label: "Case-insensitive", click: () => uniqueLast("ci") },
+        { label: "Trim then unique", click: () => uniqueLast("trim") },
+        { label: "Unique + sort", click: () => uniqueLast("sort") },
+        { label: "Unique words", click: () => uniqueLast("words") },
+        { label: "Unique + counts", click: () => uniqueLast("count") },
+        { label: "Duplicates only", click: () => uniqueLast("dups-only") },
+        { label: "Drop blanks", click: () => uniqueLast("drop-blanks") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -8174,6 +8362,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "strip"),
       text: markdownText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("unique-last", (_e, kind) =>
+    uniqueLast(String(kind || "first"))
+  );
+  ipcMain.handle("unique-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "first"),
+      text: uniqueText(src, kind),
       source: src,
     };
   });

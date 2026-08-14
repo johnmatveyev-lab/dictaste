@@ -460,6 +460,19 @@
     <button type="button" id="mdEscape" class="ghost">Escape</button>
   </div>
 
+  <label>Unique last <span style="font-weight:400;color:var(--muted)">(dedupe lines · case-insensitive · words · counts · dups only · drop blanks · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="unFirst" class="ghost">Keep first</button>
+    <button type="button" id="unLast" class="ghost">Keep last</button>
+    <button type="button" id="unCi" class="ghost">Ignore case</button>
+    <button type="button" id="unTrim" class="ghost">Trim+unique</button>
+    <button type="button" id="unSort" class="ghost">Unique+sort</button>
+    <button type="button" id="unWords" class="ghost">Words</button>
+    <button type="button" id="unCount" class="ghost">Counts</button>
+    <button type="button" id="unDups" class="ghost">Dups only</button>
+    <button type="button" id="unBlanks" class="ghost">Drop blanks</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1762,6 +1775,21 @@
     document.getElementById('mdLinkUrls').onclick = () => markdownNow('link-urls');
     document.getElementById('mdHr').onclick = () => markdownNow('hr-before');
     document.getElementById('mdEscape').onclick = () => markdownNow('escape');
+    async function uniqueNow(kind) {
+      const r = await window.dictaste.uniqueLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Unique: no changes' : ('Unique · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Unique failed');
+    }
+    document.getElementById('unFirst').onclick = () => uniqueNow('first');
+    document.getElementById('unLast').onclick = () => uniqueNow('last');
+    document.getElementById('unCi').onclick = () => uniqueNow('ci');
+    document.getElementById('unTrim').onclick = () => uniqueNow('trim');
+    document.getElementById('unSort').onclick = () => uniqueNow('sort');
+    document.getElementById('unWords').onclick = () => uniqueNow('words');
+    document.getElementById('unCount').onclick = () => uniqueNow('count');
+    document.getElementById('unDups').onclick = () => uniqueNow('dups-only');
+    document.getElementById('unBlanks').onclick = () => uniqueNow('drop-blanks');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

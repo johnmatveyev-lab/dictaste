@@ -731,6 +731,15 @@ else fail("settings missing markdown last");
 if (/markdownLast|markdownPreview/.test(preload))
   pass("preload markdown last");
 else fail("preload missing markdown last");
+if (/uniqueLast|uniqueText|Unique last/.test(main))
+  pass("main unique last");
+else fail("main missing unique last");
+if (/id="unFirst"|uniqueLast|Unique last/i.test(settings))
+  pass("settings unique last");
+else fail("settings missing unique last");
+if (/uniqueLast|uniquePreview/.test(preload))
+  pass("preload unique last");
+else fail("preload missing unique last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
