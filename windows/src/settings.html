@@ -604,6 +604,17 @@
     <button type="button" id="sqN10" class="ghost">1..10</button>
   </div>
 
+  <label>Swap last <span style="font-weight:400;color:var(--muted)">(colon/equals/pipe/comma · first/last words · lines · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="swColon" class="ghost">Swap :</button>
+    <button type="button" id="swEq" class="ghost">Swap =</button>
+    <button type="button" id="swPipe" class="ghost">Swap |</button>
+    <button type="button" id="swComma" class="ghost">Swap ,</button>
+    <button type="button" id="swArrow" class="ghost">Swap =></button>
+    <button type="button" id="swWords" class="ghost">Words</button>
+    <button type="button" id="swLines" class="ghost">First/last line</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -2072,6 +2083,19 @@
     document.getElementById('sqCont').onclick = () => sequenceNow('continue');
     document.getElementById('sqN5').onclick = () => sequenceNow('n5');
     document.getElementById('sqN10').onclick = () => sequenceNow('n10');
+    async function swapNow(kind) {
+      const r = await window.dictaste.swapLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Swap: no changes' : ('Swap · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Swap failed');
+    }
+    document.getElementById('swColon').onclick = () => swapNow('colon');
+    document.getElementById('swEq').onclick = () => swapNow('equals');
+    document.getElementById('swPipe').onclick = () => swapNow('pipe');
+    document.getElementById('swComma').onclick = () => swapNow('comma');
+    document.getElementById('swArrow').onclick = () => swapNow('arrow');
+    document.getElementById('swWords').onclick = () => swapNow('words');
+    document.getElementById('swLines').onclick = () => swapNow('first-last-line');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

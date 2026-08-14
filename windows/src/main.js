@@ -61,6 +61,7 @@
  * - Increment last (all/first/last · +1/-1 · pad)
  * - Normalize last (NFC · accents · ASCII · ZW · tidy)
  * - Sequence last (1..n · letters · roman · expand range)
+ * - Swap last (colon/equals/pipe/comma columns · first/last words)
  */
 const {
   app,
@@ -7371,8 +7372,13 @@ function parseRangeToken(s) {
 
 function sequenceText(raw, kind = "number") {
   const t = String(raw || "");
-  if (!t.length) return "";
   const k = String(kind || "number");
+  // Pure generators work with empty transcript
+  if (k === "n5" || k === "n10" || k === "n20") {
+    const n = k === "n20" ? 20 : k === "n5" ? 5 : 10;
+    return Array.from({ length: n }, (_, i) => String(i + 1)).join("\n");
+  }
+  if (!t.length) return "";
   const endsWithNl = /\r?\n$/.test(t);
   const lines = t.split(/\r\n|\r|\n/);
   const finish = (arr) => {
@@ -7389,7 +7395,9 @@ function sequenceText(raw, kind = "number") {
         if (!l.trim()) return l;
         i += 1;
         const lead = (l.match(/^\s*/) || [""])[0];
-        const body = l.replace(/^\s*(?:\d+|[A-Za-z]|[IVXLCDM]+)[.)]\s+/i, "").trimStart();
+        const body = l
+          .replace(/^\s*(?:\d+|[A-Za-z]|[IVXLCDM]+)[.)]\s+/i, "")
+          .trimStart();
         return lead + fmt(i) + body;
       })
     );
@@ -7422,12 +7430,6 @@ function sequenceText(raw, kind = "number") {
       }
       return finish(out);
     }
-    case "n10":
-    case "n20":
-    case "n5": {
-      const n = k === "n20" ? 20 : k === "n5" ? 5 : 10;
-      return Array.from({ length: n }, (_, i) => String(i + 1)).join("\n");
-    }
     case "continue": {
       let start = 1;
       for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -7454,30 +7456,48 @@ function sequenceText(raw, kind = "number") {
 }
 
 function sequenceLast(kind = "number") {
-  const src = getLatestTranscript();
-  if (!src) {
+  const k = String(kind || "number");
+  const src = getLatestTranscript() || "";
+  const allowEmpty = k === "n5" || k === "n10" || k === "n20";
+  if (!src && !allowEmpty) {
     notify("No transcript for sequence", { force: true });
     return { ok: false, error: "empty" };
   }
-  const text = sequenceText(src, kind);
+  const text = sequenceText(src, k);
+  if (!text) {
+    notify("Sequence made no changes", { force: true });
+    return { ok: true, text: src, kind: k, deliver: "none", source: src, unchanged: true };
+  }
   if (text === src) {
     notify("Sequence made no changes", { force: true });
-    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+    return { ok: true, text, kind: k, deliver: "none", source: src, unchanged: true };
   }
   lastTranscript = text;
   try {
-    const hist = normalizeHistory(cfg?.history);
-    if (hist.length && String(hist[0] || "").trim() === src) {
-      hist[0] = text;
-      cfg = { ...cfg, history: hist };
-      saveConfig(cfg);
-    } else {
-      const pinned = normalizePinned(cfg?.pinnedHistory);
-      if (pinned.length && String(pinned[0] || "").trim() === src) {
-        pinned[0] = text;
-        cfg = { ...cfg, pinnedHistory: pinned };
+    if (src) {
+      const hist = normalizeHistory(cfg?.history);
+      if (hist.length && String(hist[0] || "").trim() === src) {
+        hist[0] = text;
+        cfg = { ...cfg, history: hist };
         saveConfig(cfg);
+      } else {
+        const pinned = normalizePinned(cfg?.pinnedHistory);
+        if (pinned.length && String(pinned[0] || "").trim() === src) {
+          pinned[0] = text;
+          cfg = { ...cfg, pinnedHistory: pinned };
+          saveConfig(cfg);
+        } else if (allowEmpty && !src) {
+          // seed history with generated sequence
+          const next = [text, ...hist].slice(0, Math.max(10, Number(cfg?.historyMax) || 25));
+          cfg = { ...cfg, history: next };
+          saveConfig(cfg);
+        }
       }
+    } else if (allowEmpty) {
+      const hist = normalizeHistory(cfg?.history);
+      const next = [text, ...hist].slice(0, Math.max(10, Number(cfg?.historyMax) || 25));
+      cfg = { ...cfg, history: next };
+      saveConfig(cfg);
     }
   } catch {
     /* ignore persist errors */
@@ -7485,7 +7505,7 @@ function sequenceLast(kind = "number") {
   rebuildTrayMenu();
   const del = deliverText(text);
   if (del.mode === "paste") notifyDeliver(text, "paste");
-  return { ok: true, text, kind, deliver: del.mode, source: src };
+  return { ok: true, text, kind: k, deliver: del.mode, source: src };
 }
 
 /**
@@ -9518,6 +9538,19 @@ function rebuildTrayMenu() {
         { label: "Make 1..10", click: () => sequenceLast("n10") },
       ],
     },
+    {
+      label: "Swap last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Swap on :", click: () => swapLast("colon") },
+        { label: "Swap on =", click: () => swapLast("equals") },
+        { label: "Swap on |", click: () => swapLast("pipe") },
+        { label: "Swap on ,", click: () => swapLast("comma") },
+        { label: "Swap on => / ->", click: () => swapLast("arrow") },
+        { label: "Swap first/last words", click: () => swapLast("words") },
+        { label: "Swap first/last lines", click: () => swapLast("first-last-line") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10146,6 +10179,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "number"),
       text: sequenceText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("swap-last", (_e, kind) =>
+    swapLast(String(kind || "colon"))
+  );
+  ipcMain.handle("swap-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "colon"),
+      text: swapText(src, kind),
       source: src,
     };
   });

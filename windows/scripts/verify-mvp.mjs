@@ -830,6 +830,15 @@ else fail("settings missing sequence last");
 if (/sequenceLast|sequencePreview/.test(preload))
   pass("preload sequence last");
 else fail("preload missing sequence last");
+if (/swapLast|swapText|Swap last/.test(main))
+  pass("main swap last");
+else fail("main missing swap last");
+if (/id="swColon"|swapLast|Swap last/i.test(settings))
+  pass("settings swap last");
+else fail("settings missing swap last");
+if (/swapLast|swapPreview/.test(preload))
+  pass("preload swap last");
+else fail("preload missing swap last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
