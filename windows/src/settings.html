@@ -391,6 +391,19 @@
     <button type="button" id="freqChars" class="ghost">Chars top 10</button>
   </div>
 
+  <label>Redact last <span style="font-weight:400;color:var(--muted)">(emails · phones · URLs · SSN · cards · IPs · numbers · keep last 4 · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="redactAll" class="ghost">All PII</button>
+    <button type="button" id="redactEmails" class="ghost">Emails</button>
+    <button type="button" id="redactPhones" class="ghost">Phones</button>
+    <button type="button" id="redactUrls" class="ghost">URLs</button>
+    <button type="button" id="redactSsn" class="ghost">SSN</button>
+    <button type="button" id="redactCards" class="ghost">Cards</button>
+    <button type="button" id="redactIps" class="ghost">IPs</button>
+    <button type="button" id="redactNumbers" class="ghost">Numbers</button>
+    <button type="button" id="redactLast4" class="ghost">Keep last 4</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -1612,6 +1625,23 @@
     document.getElementById('freqUniqueLines').onclick = () => frequencyNow('unique-lines');
     document.getElementById('freqBigrams').onclick = () => frequencyNow('bigrams-top10');
     document.getElementById('freqChars').onclick = () => frequencyNow('chars-top10');
+    async function redactNow(kind) {
+      const r = await window.dictaste.redactLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'No changes' : ((r.deliver === 'clipboard' ? 'On clipboard · ' : 'Pasted · ') + (kind + (r.text ? (' · ' + r.text.slice(0, 48)) : ''))))
+        : (r?.error || 'Redact failed');
+      if (r?.text != null && r?.ok && !r.unchanged) document.getElementById('text').value = r.text;
+      if (r?.ok && !r.unchanged) renderHistory().catch(() => {});
+    }
+    document.getElementById('redactAll').onclick = () => redactNow('all');
+    document.getElementById('redactEmails').onclick = () => redactNow('emails');
+    document.getElementById('redactPhones').onclick = () => redactNow('phones');
+    document.getElementById('redactUrls').onclick = () => redactNow('urls');
+    document.getElementById('redactSsn').onclick = () => redactNow('ssn');
+    document.getElementById('redactCards').onclick = () => redactNow('credit-cards');
+    document.getElementById('redactIps').onclick = () => redactNow('ips');
+    document.getElementById('redactNumbers').onclick = () => redactNow('numbers');
+    document.getElementById('redactLast4').onclick = () => redactNow('keep-last4');
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
     };

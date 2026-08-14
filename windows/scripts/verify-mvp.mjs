@@ -684,6 +684,15 @@ else fail("settings missing frequency last");
 if (/frequencyLast|frequencyPreview/.test(preload))
   pass("preload frequency last");
 else fail("preload missing frequency last");
+if (/redactLast|redactText|Redact last/.test(main))
+  pass("main redact last");
+else fail("main missing redact last");
+if (/id="redactAll"|redactLast|Redact last/i.test(settings))
+  pass("settings redact last");
+else fail("settings missing redact last");
+if (/redactLast|redactPreview/.test(preload))
+  pass("preload redact last");
+else fail("preload missing redact last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

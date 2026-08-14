@@ -5280,6 +5280,135 @@ function frequencyLast(kind = "words-top10") {
 }
 
 /**
+ * Redact / mask sensitive tokens in last transcript.
+ * @param {"emails"|"phones"|"urls"|"numbers"|"ssn"|"credit-cards"|"ips"|"all"|"keep-last4"|"brackets"} kind
+ */
+function redactText(raw, kind = "all") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "all");
+
+  const reEmail =
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+  // US-ish phones: (555) 123-4567, 555-123-4567, +1 555 123 4567, 555.123.4567
+  const rePhone =
+    /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/g;
+  const reUrl =
+    /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
+  const reSsn = /\b\d{3}-\d{2}-\d{4}\b/g;
+  // simple card-ish: 13–19 digits with optional spaces/dashes, Luhn not required
+  const reCard =
+    /\b(?:\d[ -]*?){13,19}\b/g;
+  const reIp =
+    /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b/g;
+  // standalone numbers (3+ digits), avoid years optionally - keep broad for privacy
+  const reNumbers = /\b\d{3,}(?:[.,]\d+)?\b/g;
+
+  const maskKeepLast4 = (s) => {
+    const digits = String(s).replace(/\D/g, "");
+    if (digits.length <= 4) return "[REDACTED]";
+    const last4 = digits.slice(-4);
+    return `****${last4}`;
+  };
+
+  const apply = (text, type) => {
+    switch (type) {
+      case "emails":
+        return text.replace(reEmail, "[EMAIL]");
+      case "phones":
+        return text.replace(rePhone, "[PHONE]");
+      case "urls":
+        return text.replace(reUrl, "[URL]");
+      case "ssn":
+        return text.replace(reSsn, "[SSN]");
+      case "credit-cards":
+        return text.replace(reCard, (m) => {
+          const d = m.replace(/\D/g, "");
+          // skip short pure years etc.
+          if (d.length < 13) return m;
+          return "[CARD]";
+        });
+      case "ips":
+        return text.replace(reIp, "[IP]");
+      case "numbers":
+        return text.replace(reNumbers, "[NUM]");
+      case "keep-last4": {
+        let out = text;
+        out = out.replace(reCard, (m) => {
+          const d = m.replace(/\D/g, "");
+          if (d.length < 13) return m;
+          return maskKeepLast4(m);
+        });
+        out = out.replace(rePhone, (m) => maskKeepLast4(m));
+        out = out.replace(reSsn, (m) => maskKeepLast4(m));
+        return out;
+      }
+      case "brackets":
+        // already-labeled style: wrap common PII in [ ]
+        return apply(apply(apply(apply(text, "emails"), "phones"), "urls"), "ssn");
+      case "all":
+      default: {
+        let out = text;
+        out = out.replace(reEmail, "[EMAIL]");
+        out = out.replace(reUrl, "[URL]");
+        out = out.replace(reSsn, "[SSN]");
+        out = out.replace(reCard, (m) => {
+          const d = m.replace(/\D/g, "");
+          if (d.length < 13) return m;
+          return "[CARD]";
+        });
+        out = out.replace(reIp, "[IP]");
+        out = out.replace(rePhone, "[PHONE]");
+        return out;
+      }
+    }
+  };
+
+  return apply(t, k);
+}
+
+/**
+ * Redact sensitive tokens in last transcript and paste.
+ * Updates lastTranscript + history[0] when matched.
+ */
+function redactLast(kind = "all") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to redact", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = redactText(src, kind);
+  if (text === src) {
+    notify("Redact made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") {
+    notifyDeliver(text, "paste");
+  }
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Join non-empty lines of last transcript with a separator.
  * @param {"space"|"comma"|"comma-space"|"semicolon"|"pipe"|"slash"|"and"|"newline"|"concat"} kind
  */
@@ -6831,6 +6960,21 @@ function rebuildTrayMenu() {
         { label: "Characters · top 10", click: () => frequencyLast("chars-top10") },
       ],
     },
+    {
+      label: "Redact last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "All common PII", click: () => redactLast("all") },
+        { label: "Emails", click: () => redactLast("emails") },
+        { label: "Phones", click: () => redactLast("phones") },
+        { label: "URLs", click: () => redactLast("urls") },
+        { label: "SSNs", click: () => redactLast("ssn") },
+        { label: "Credit cards", click: () => redactLast("credit-cards") },
+        { label: "IP addresses", click: () => redactLast("ips") },
+        { label: "Numbers (3+ digits)", click: () => redactLast("numbers") },
+        { label: "Keep last 4 (card/phone/SSN)", click: () => redactLast("keep-last4") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -7290,6 +7434,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "words-top10"),
       text: frequencyText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("redact-last", (_e, kind) =>
+    redactLast(String(kind || "all"))
+  );
+  ipcMain.handle("redact-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "all"),
+      text: redactText(src, kind),
       source: src,
     };
   });
