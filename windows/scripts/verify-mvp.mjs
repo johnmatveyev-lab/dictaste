@@ -866,6 +866,15 @@ else fail("settings missing cycle last");
 if (/cycleLast|cyclePreview/.test(preload))
   pass("preload cycle last");
 else fail("preload missing cycle last");
+if (/listLast|listText|List last/.test(main))
+  pass("main list last");
+else fail("main missing list last");
+if (/id="lsBullets"|listLast|List last/i.test(settings))
+  pass("settings list last");
+else fail("settings missing list last");
+if (/listLast|listPreview/.test(preload))
+  pass("preload list last");
+else fail("preload missing list last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

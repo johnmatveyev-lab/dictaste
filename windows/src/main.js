@@ -65,6 +65,7 @@
  * - Math last (sum · avg · min/max · product · running · eval lines)
  * - Take last (left/right of :/=/|/ , / => · first/last word · line)
  * - Cycle last (left/right on :/=/|/ , / => · words)
+ * - List last (bullets · numbered · comma · and · strip markers)
  */
 const {
   app,
@@ -8046,6 +8047,155 @@ function cycleLast(kind = "pipe-left") {
 }
 
 /**
+ * Convert last transcript between list formats (bullets, numbered, comma, and-list).
+ * @param {"bullets"|"dashes"|"numbered"|"numbered-paren"|"comma"|"semicolon"|"and"|"or"|"strip"|"lines-from-comma"} kind
+ */
+function listText(raw, kind = "bullets") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "bullets");
+  const endsWithNl = /\r?\n$/.test(t);
+  const finish = (arr) => {
+    let s = arr.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  };
+
+  const stripMarker = (line) =>
+    String(line || "")
+      .replace(
+        /^\s*(?:[-*•·▪▸►]|\d+[.)]|\([a-zA-Z0-9]+\)|[a-zA-Z][.)]|☐|☑|\[(?: |x|X)\])\s+/u,
+        ""
+      )
+      .trim();
+
+  const itemsFromLines = () => {
+    const lines = t.split(/\r\n|\r|\n/);
+    return lines.map((l) => stripMarker(l)).filter((l) => l.length > 0);
+  };
+
+  const itemsFromInline = () => {
+    const one = t.replace(/\r\n|\r|\n/g, " ").trim();
+    if (/;/.test(one) && one.split(";").length >= 2) {
+      return one
+        .split(";")
+        .map((s) => stripMarker(s.trim()))
+        .filter(Boolean);
+    }
+    if (/,/.test(one)) {
+      const cleaned = one
+        .replace(/\s+and\s+/gi, ", ")
+        .replace(/\s+or\s+/gi, ", ");
+      return cleaned
+        .split(",")
+        .map((s) => stripMarker(s.trim()))
+        .filter(Boolean);
+    }
+    return itemsFromLines();
+  };
+
+  const resolveItems = () => {
+    const lines = itemsFromLines();
+    // Prefer line items when multiple non-empty lines exist
+    if (lines.length >= 2) return lines;
+    const inline = itemsFromInline();
+    return inline.length ? inline : lines;
+  };
+
+  const joinAnd = (items, conj = "and") => {
+    if (!items.length) return "";
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return `${items[0]} ${conj} ${items[1]}`;
+    return `${items.slice(0, -1).join(", ")}, ${conj} ${items[items.length - 1]}`;
+  };
+
+  switch (k) {
+    case "dashes": {
+      const items = resolveItems();
+      return finish(items.map((i) => `- ${i}`));
+    }
+    case "numbered": {
+      const items = resolveItems();
+      return finish(items.map((i, idx) => `${idx + 1}. ${i}`));
+    }
+    case "numbered-paren": {
+      const items = resolveItems();
+      return finish(items.map((i, idx) => `${idx + 1}) ${i}`));
+    }
+    case "comma": {
+      const items = resolveItems();
+      return items.join(", ");
+    }
+    case "semicolon": {
+      const items = resolveItems();
+      return items.join("; ");
+    }
+    case "and": {
+      const items = resolveItems();
+      return joinAnd(items, "and");
+    }
+    case "or": {
+      const items = resolveItems();
+      return joinAnd(items, "or");
+    }
+    case "strip": {
+      const lines = t.split(/\r\n|\r|\n/);
+      return finish(
+        lines.map((l) => {
+          if (!l.trim()) return l;
+          const lead = (l.match(/^\s*/) || [""])[0];
+          return lead + stripMarker(l);
+        })
+      );
+    }
+    case "lines-from-comma": {
+      const items = itemsFromInline();
+      return finish(items);
+    }
+    case "bullets":
+    default: {
+      const items = resolveItems();
+      return finish(items.map((i) => `• ${i}`));
+    }
+  }
+}
+
+function listLast(kind = "bullets") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for list", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = listText(src, kind);
+  if (text === src) {
+    notify("List made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
  */
@@ -10140,6 +10290,22 @@ function rebuildTrayMenu() {
         { label: "Words right", click: () => cycleLast("words-right") },
       ],
     },
+    {
+      label: "List last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "• Bullets", click: () => listLast("bullets") },
+        { label: "- Dashes", click: () => listLast("dashes") },
+        { label: "1. Numbered", click: () => listLast("numbered") },
+        { label: "1) Numbered paren", click: () => listLast("numbered-paren") },
+        { label: "Comma list", click: () => listLast("comma") },
+        { label: "Semicolon list", click: () => listLast("semicolon") },
+        { label: "a, b, and c", click: () => listLast("and") },
+        { label: "a, b, or c", click: () => listLast("or") },
+        { label: "Strip markers", click: () => listLast("strip") },
+        { label: "Comma → lines", click: () => listLast("lines-from-comma") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10820,6 +10986,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "pipe-left"),
       text: cycleText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("list-last", (_e, kind) =>
+    listLast(String(kind || "bullets"))
+  );
+  ipcMain.handle("list-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "bullets"),
+      text: listText(src, kind),
       source: src,
     };
   });
