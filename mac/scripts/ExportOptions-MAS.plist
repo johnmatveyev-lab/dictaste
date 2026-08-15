@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Skeleton for Mac App Store export. Fill provisioningProfiles locally;
+	     do not commit secrets or profile UUIDs required to merge. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>L85AF3V872</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<!-- Example (local only):
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.johnmatveyev.flowdictate</key>
+		<string>Dictaste Mac App Store</string>
+	</dict>
+	-->
+</dict>
+</plist>

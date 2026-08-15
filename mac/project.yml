@@ -2,6 +2,11 @@ name: FlowDictate
 options:
   bundleIdPrefix: com.johnmatveyev
   createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+  # Parallel Mac App Store track — App Sandbox ON. DMG/notarize keeps using Release.
+  ReleaseMAS: release
 targets:
   FlowDictate:
     type: application
@@ -11,11 +16,15 @@ targets:
       - path: FlowDictate
         excludes:
           - "Info.plist"
+          - "PrivacyInfo.xcprivacy"
       - path: Support/com.johnmatveyev.flowdictate.plist
         buildPhase:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchAgents
+    resources:
+      # App Store privacy manifest (harmless in Developer ID builds; required for MAS).
+      - path: FlowDictate/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.johnmatveyev.flowdictate
@@ -35,6 +44,19 @@ targets:
         ENABLE_APP_SANDBOX: NO
         CURRENT_PROJECT_VERSION: 4
         MARKETING_VERSION: "0.1.4"
+      configs:
+        # Developer ID / notarized DMG path unchanged: sandbox OFF; scripts apply
+        # scripts/Dictaste.entitlements + hardened runtime at codesign time.
+        Debug:
+          ENABLE_APP_SANDBOX: NO
+          ENABLE_HARDENED_RUNTIME: NO
+        Release:
+          ENABLE_APP_SANDBOX: NO
+          ENABLE_HARDENED_RUNTIME: NO
+        ReleaseMAS:
+          ENABLE_APP_SANDBOX: YES
+          ENABLE_HARDENED_RUNTIME: YES
+          CODE_SIGN_ENTITLEMENTS: scripts/Dictaste-MAS.entitlements
 schemes:
   FlowDictate:
     build:
@@ -42,3 +64,11 @@ schemes:
         FlowDictate: all
     run:
       config: Release
+  FlowDictate-MAS:
+    build:
+      targets:
+        FlowDictate: all
+    run:
+      config: ReleaseMAS
+    archive:
+      config: ReleaseMAS
