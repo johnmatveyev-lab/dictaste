@@ -839,6 +839,15 @@ else fail("settings missing swap last");
 if (/swapLast|swapPreview/.test(preload))
   pass("preload swap last");
 else fail("preload missing swap last");
+if (/mathLast|mathText|Math last/.test(main))
+  pass("main math last");
+else fail("main missing math last");
+if (/id="mtSum"|mathLast|Math last/i.test(settings))
+  pass("settings math last");
+else fail("settings missing math last");
+if (/mathLast|mathPreview/.test(preload))
+  pass("preload math last");
+else fail("preload missing math last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

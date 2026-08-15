@@ -62,6 +62,7 @@
  * - Normalize last (NFC · accents · ASCII · ZW · tidy)
  * - Sequence last (1..n · letters · roman · expand range)
  * - Swap last (colon/equals/pipe/comma columns · first/last words)
+ * - Math last (sum · avg · min/max · product · running · eval lines)
  */
 const {
   app,
@@ -7630,6 +7631,151 @@ function swapLast(kind = "colon") {
   return { ok: true, text, kind, deliver: del.mode, source: src };
 }
 
+const MATH_NUM_RE =
+  /[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+function extractMathNumbers(raw) {
+  const t = String(raw || "");
+  const out = [];
+  let m;
+  const re = new RegExp(MATH_NUM_RE.source, "g");
+  while ((m = re.exec(t)) !== null) {
+    const token = m[0];
+    const n = Number(token.replace(/,/g, ""));
+    if (Number.isFinite(n)) out.push({ token, value: n, index: m.index });
+  }
+  return out;
+}
+
+function formatMathNumber(n) {
+  if (!Number.isFinite(n)) return "NaN";
+  if (Number.isInteger(n)) return String(n);
+  const s = n.toPrecision(12).replace(/\.?0+$/, "");
+  return s;
+}
+
+/**
+ * Math over numbers found in last transcript.
+ * @param {"sum"|"avg"|"min"|"max"|"product"|"count"|"range"|"summary"|"running"|"eval-lines"} kind
+ */
+function mathText(raw, kind = "sum") {
+  const t = String(raw || "");
+  const k = String(kind || "sum");
+  const nums = extractMathNumbers(t);
+
+  if (k === "eval-lines") {
+    const endsWithNl = /\r?\n$/.test(t);
+    const lines = t.split(/\r\n|\r|\n/);
+    const out = lines.map((line) => {
+      const expr = line.trim();
+      if (!expr) return line;
+      // only simple arithmetic: digits, ops, parens, decimal, spaces, commas
+      if (!/^[0-9+\-*/().%\s,eE]+$/.test(expr)) return line;
+      const cleaned = expr.replace(/,/g, "");
+      try {
+        // eslint-disable-next-line no-new-func
+        const val = Function(`"use strict"; return (${cleaned});`)();
+        if (typeof val !== "number" || !Number.isFinite(val)) return line;
+        return `${line.trim()} = ${formatMathNumber(val)}`;
+      } catch {
+        return line;
+      }
+    });
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  }
+
+  if (k === "running") {
+    const endsWithNl = /\r?\n$/.test(t);
+    const lines = t.split(/\r\n|\r|\n/);
+    let run = 0;
+    const out = lines.map((line) => {
+      if (!line.trim()) return line;
+      const found = extractMathNumbers(line);
+      if (!found.length) return line;
+      const lineSum = found.reduce((a, b) => a + b.value, 0);
+      run += lineSum;
+      return `${line}  → ${formatMathNumber(run)}`;
+    });
+    let s = out.join("\n");
+    if (endsWithNl && !s.endsWith("\n")) s += "\n";
+    return s;
+  }
+
+  if (!nums.length) return t;
+  const values = nums.map((n) => n.value);
+  const sum = values.reduce((a, b) => a + b, 0);
+  const count = values.length;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = sum / count;
+  let product = 1;
+  for (const v of values) product *= v;
+
+  switch (k) {
+    case "avg":
+      return formatMathNumber(avg);
+    case "min":
+      return formatMathNumber(min);
+    case "max":
+      return formatMathNumber(max);
+    case "product":
+      return formatMathNumber(product);
+    case "count":
+      return String(count);
+    case "range":
+      return `${formatMathNumber(min)} … ${formatMathNumber(max)} (${formatMathNumber(max - min)})`;
+    case "summary":
+      return [
+        `count: ${count}`,
+        `sum: ${formatMathNumber(sum)}`,
+        `avg: ${formatMathNumber(avg)}`,
+        `min: ${formatMathNumber(min)}`,
+        `max: ${formatMathNumber(max)}`,
+        `product: ${formatMathNumber(product)}`,
+      ].join("\n");
+    case "sum":
+    default:
+      return formatMathNumber(sum);
+  }
+}
+
+function mathLast(kind = "sum") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript for math", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = mathText(src, kind);
+  if (text === src) {
+    notify("Math made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
 /**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
@@ -9673,6 +9819,22 @@ function rebuildTrayMenu() {
         { label: "Swap first/last lines", click: () => swapLast("first-last-line") },
       ],
     },
+    {
+      label: "Math last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Sum", click: () => mathLast("sum") },
+        { label: "Average", click: () => mathLast("avg") },
+        { label: "Min", click: () => mathLast("min") },
+        { label: "Max", click: () => mathLast("max") },
+        { label: "Product", click: () => mathLast("product") },
+        { label: "Count numbers", click: () => mathLast("count") },
+        { label: "Range (min…max)", click: () => mathLast("range") },
+        { label: "Summary block", click: () => mathLast("summary") },
+        { label: "Running total per line", click: () => mathLast("running") },
+        { label: "Eval arithmetic lines", click: () => mathLast("eval-lines") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10314,6 +10476,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "colon"),
       text: swapText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("math-last", (_e, kind) =>
+    mathLast(String(kind || "sum"))
+  );
+  ipcMain.handle("math-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "sum"),
+      text: mathText(src, kind),
       source: src,
     };
   });

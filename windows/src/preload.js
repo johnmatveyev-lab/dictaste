@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld("dictaste", {
   sequencePreview: (kind) => ipcRenderer.invoke("sequence-preview", kind),
   swapLast: (kind) => ipcRenderer.invoke("swap-last", kind),
   swapPreview: (kind) => ipcRenderer.invoke("swap-preview", kind),
+  mathLast: (kind) => ipcRenderer.invoke("math-last", kind),
+  mathPreview: (kind) => ipcRenderer.invoke("math-preview", kind),
   normalizeLast: (kind) => ipcRenderer.invoke("normalize-last", kind),
   normalizePreview: (kind) => ipcRenderer.invoke("normalize-preview", kind),
   timestampLast: (kind) => ipcRenderer.invoke("timestamp-last", kind),
