@@ -63,6 +63,7 @@
  * - Sequence last (1..n · letters · roman · expand range)
  * - Swap last (colon/equals/pipe/comma columns · first/last words)
  * - Math last (sum · avg · min/max · product · running · eval lines)
+ * - Take last (left/right of :/=/|/ , / => · first/last word · line)
  */
 const {
   app,
@@ -7663,9 +7664,15 @@ function mathText(raw, kind = "sum") {
   const k = String(kind || "sum");
   const nums = extractMathNumbers(t);
 
+  const splitKeepEnd = () => {
+    const ends = /\r\n$/.test(t) ? "\r\n" : /\n$/.test(t) ? "\n" : /\r$/.test(t) ? "\r" : "";
+    const body = ends ? t.slice(0, -ends.length) : t;
+    const nl = body.includes("\r\n") ? "\r\n" : body.includes("\r") ? "\r" : "\n";
+    return { lines: body.split(/\r\n|\r|\n/), nl, ends };
+  };
+
   if (k === "eval-lines") {
-    const endsWithNl = /\r?\n$/.test(t);
-    const lines = t.split(/\r\n|\r|\n/);
+    const { lines, nl, ends } = splitKeepEnd();
     const out = lines.map((line) => {
       const expr = line.trim();
       if (!expr) return line;
@@ -7681,14 +7688,11 @@ function mathText(raw, kind = "sum") {
         return line;
       }
     });
-    let s = out.join("\n");
-    if (endsWithNl && !s.endsWith("\n")) s += "\n";
-    return s;
+    return out.join(nl) + ends;
   }
 
   if (k === "running") {
-    const endsWithNl = /\r?\n$/.test(t);
-    const lines = t.split(/\r\n|\r|\n/);
+    const { lines, nl, ends } = splitKeepEnd();
     let run = 0;
     const out = lines.map((line) => {
       if (!line.trim()) return line;
@@ -7698,9 +7702,7 @@ function mathText(raw, kind = "sum") {
       run += lineSum;
       return `${line}  → ${formatMathNumber(run)}`;
     });
-    let s = out.join("\n");
-    if (endsWithNl && !s.endsWith("\n")) s += "\n";
-    return s;
+    return out.join(nl) + ends;
   }
 
   if (!nums.length) return t;
@@ -7750,6 +7752,138 @@ function mathLast(kind = "sum") {
   const text = mathText(src, kind);
   if (text === src) {
     notify("Math made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
+ * Take one side of last transcript (delimiter columns · first/last word · line).
+ * @param {"colon-left"|"colon-right"|"equals-left"|"equals-right"|"pipe-left"|"pipe-right"|"comma-left"|"comma-right"|"arrow-left"|"arrow-right"|"first-word"|"last-word"|"first-line"|"last-line"} kind
+ */
+function takeText(raw, kind = "colon-right") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "colon-right");
+
+  const splitKeepEnd = () => {
+    const ends = /\r\n$/.test(t) ? "\r\n" : /\n$/.test(t) ? "\n" : /\r$/.test(t) ? "\r" : "";
+    const body = ends ? t.slice(0, -ends.length) : t;
+    const nl = body.includes("\r\n") ? "\r\n" : body.includes("\r") ? "\r" : "\n";
+    return { lines: body.split(/\r\n|\r|\n/), nl, ends };
+  };
+
+  const mapLines = (fn) => {
+    const { lines, nl, ends } = splitKeepEnd();
+    return lines.map(fn).join(nl) + ends;
+  };
+
+  const takeOn = (line, seps, side) => {
+    let searchFrom = 0;
+    if (seps.includes(":")) {
+      const scheme = line.match(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//);
+      if (scheme) searchFrom = scheme[0].length;
+    }
+    let best = -1;
+    let sep = null;
+    for (const s of seps) {
+      const i = line.indexOf(s, searchFrom);
+      if (i >= 0 && (best < 0 || i < best || (i === best && s.length > String(sep || "").length))) {
+        best = i;
+        sep = s;
+      }
+    }
+    if (best < 0 || !sep) return line;
+    const left = line.slice(0, best);
+    const right = line.slice(best + sep.length);
+    const leftTrail = (left.match(/\s*$/) || [""])[0];
+    const rightLead = (right.match(/^\s*/) || [""])[0];
+    const l = left.slice(0, left.length - leftTrail.length);
+    const r = right.slice(rightLead.length);
+    if (side === "left") return l.length ? l : line;
+    return r.length ? r : line;
+  };
+
+  const takeWord = (line, which) => {
+    const m = line.match(/^(\s*)(.*?)(\s*)$/);
+    if (!m) return line;
+    const parts = m[2].split(/(\s+)/);
+    const wordIdx = [];
+    for (let i = 0; i < parts.length; i += 1) {
+      if (parts[i] && !/^\s+$/.test(parts[i])) wordIdx.push(i);
+    }
+    if (!wordIdx.length) return line;
+    const idx = which === "last" ? wordIdx[wordIdx.length - 1] : wordIdx[0];
+    return m[1] + parts[idx] + m[3];
+  };
+
+  switch (k) {
+    case "colon-left":
+      return mapLines((l) => takeOn(l, [":"], "left"));
+    case "equals-left":
+      return mapLines((l) => takeOn(l, ["="], "left"));
+    case "equals-right":
+      return mapLines((l) => takeOn(l, ["="], "right"));
+    case "pipe-left":
+      return mapLines((l) => takeOn(l, ["|"], "left"));
+    case "pipe-right":
+      return mapLines((l) => takeOn(l, ["|"], "right"));
+    case "comma-left":
+      return mapLines((l) => takeOn(l, [","], "left"));
+    case "comma-right":
+      return mapLines((l) => takeOn(l, [","], "right"));
+    case "arrow-left":
+      return mapLines((l) => takeOn(l, ["=>", "->", "→"], "left"));
+    case "arrow-right":
+      return mapLines((l) => takeOn(l, ["=>", "->", "→"], "right"));
+    case "first-word":
+      return mapLines((l) => takeWord(l, "first"));
+    case "last-word":
+      return mapLines((l) => takeWord(l, "last"));
+    case "first-line": {
+      const { lines, ends } = splitKeepEnd();
+      return (lines[0] || "") + ends;
+    }
+    case "last-line": {
+      const { lines, ends } = splitKeepEnd();
+      return (lines[lines.length - 1] || "") + ends;
+    }
+    case "colon-right":
+    default:
+      return mapLines((l) => takeOn(l, [":"], "right"));
+  }
+}
+
+function takeLast(kind = "colon-right") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to take", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = takeText(src, kind);
+  if (text === src) {
+    notify("Take made no changes", { force: true });
     return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
   }
   lastTranscript = text;
@@ -9835,6 +9969,24 @@ function rebuildTrayMenu() {
         { label: "Eval arithmetic lines", click: () => mathLast("eval-lines") },
       ],
     },
+    {
+      label: "Take last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Right of :", click: () => takeLast("colon-right") },
+        { label: "Left of :", click: () => takeLast("colon-left") },
+        { label: "Right of =", click: () => takeLast("equals-right") },
+        { label: "Left of =", click: () => takeLast("equals-left") },
+        { label: "Right of |", click: () => takeLast("pipe-right") },
+        { label: "Left of |", click: () => takeLast("pipe-left") },
+        { label: "Right of ,", click: () => takeLast("comma-right") },
+        { label: "Right of => / ->", click: () => takeLast("arrow-right") },
+        { label: "First word", click: () => takeLast("first-word") },
+        { label: "Last word", click: () => takeLast("last-word") },
+        { label: "First line", click: () => takeLast("first-line") },
+        { label: "Last line", click: () => takeLast("last-line") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10489,6 +10641,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "sum"),
       text: mathText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("take-last", (_e, kind) =>
+    takeLast(String(kind || "colon-right"))
+  );
+  ipcMain.handle("take-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "colon-right"),
+      text: takeText(src, kind),
       source: src,
     };
   });

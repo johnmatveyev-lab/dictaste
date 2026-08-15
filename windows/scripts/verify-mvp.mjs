@@ -848,6 +848,15 @@ else fail("settings missing math last");
 if (/mathLast|mathPreview/.test(preload))
   pass("preload math last");
 else fail("preload missing math last");
+if (/takeLast|takeText|Take last/.test(main))
+  pass("main take last");
+else fail("main missing take last");
+if (/id="tkColonR"|takeLast|Take last/i.test(settings))
+  pass("settings take last");
+else fail("settings missing take last");
+if (/takeLast|takePreview/.test(preload))
+  pass("preload take last");
+else fail("preload missing take last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

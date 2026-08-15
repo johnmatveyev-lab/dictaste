@@ -629,6 +629,21 @@
     <button type="button" id="mtEval" class="ghost">Eval lines</button>
   </div>
 
+  <label>Take last <span style="font-weight:400;color:var(--muted)">(left/right of :/=/|/ , / => · first/last word · line · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="tkColonR" class="ghost">Right :</button>
+    <button type="button" id="tkColonL" class="ghost">Left :</button>
+    <button type="button" id="tkEqR" class="ghost">Right =</button>
+    <button type="button" id="tkEqL" class="ghost">Left =</button>
+    <button type="button" id="tkPipeR" class="ghost">Right |</button>
+    <button type="button" id="tkCommaR" class="ghost">Right ,</button>
+    <button type="button" id="tkArrowR" class="ghost">Right =></button>
+    <button type="button" id="tkFirstW" class="ghost">First word</button>
+    <button type="button" id="tkLastW" class="ghost">Last word</button>
+    <button type="button" id="tkFirstL" class="ghost">First line</button>
+    <button type="button" id="tkLastL" class="ghost">Last line</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -2126,6 +2141,23 @@
     document.getElementById('mtSumm').onclick = () => mathNow('summary');
     document.getElementById('mtRun').onclick = () => mathNow('running');
     document.getElementById('mtEval').onclick = () => mathNow('eval-lines');
+    async function takeNow(kind) {
+      const r = await window.dictaste.takeLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Take: no changes' : ('Take · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Take failed');
+    }
+    document.getElementById('tkColonR').onclick = () => takeNow('colon-right');
+    document.getElementById('tkColonL').onclick = () => takeNow('colon-left');
+    document.getElementById('tkEqR').onclick = () => takeNow('equals-right');
+    document.getElementById('tkEqL').onclick = () => takeNow('equals-left');
+    document.getElementById('tkPipeR').onclick = () => takeNow('pipe-right');
+    document.getElementById('tkCommaR').onclick = () => takeNow('comma-right');
+    document.getElementById('tkArrowR').onclick = () => takeNow('arrow-right');
+    document.getElementById('tkFirstW').onclick = () => takeNow('first-word');
+    document.getElementById('tkLastW').onclick = () => takeNow('last-word');
+    document.getElementById('tkFirstL').onclick = () => takeNow('first-line');
+    document.getElementById('tkLastL').onclick = () => takeNow('last-line');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});
