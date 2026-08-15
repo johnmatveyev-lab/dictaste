@@ -64,6 +64,7 @@
  * - Swap last (colon/equals/pipe/comma columns · first/last words)
  * - Math last (sum · avg · min/max · product · running · eval lines)
  * - Take last (left/right of :/=/|/ , / => · first/last word · line)
+ * - Cycle last (left/right on :/=/|/ , / => · words)
  */
 const {
   app,
@@ -7911,6 +7912,140 @@ function takeLast(kind = "colon-right") {
 }
 
 /**
+ * Cycle last transcript fields (delimiter columns · words).
+ * Left = first field/word moves to the end. Right = last moves to the front.
+ * Separator spacing is preserved. `http://` schemes are left alone.
+ * @param {"colon-left"|"colon-right"|"equals-left"|"equals-right"|"pipe-left"|"pipe-right"|"comma-left"|"comma-right"|"arrow-left"|"arrow-right"|"words-left"|"words-right"} kind
+ */
+function cycleText(raw, kind = "pipe-left") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "pipe-left");
+
+  const splitKeepEnd = () => {
+    const ends = /\r\n$/.test(t) ? "\r\n" : /\n$/.test(t) ? "\n" : /\r$/.test(t) ? "\r" : "";
+    const body = ends ? t.slice(0, -ends.length) : t;
+    const nl = body.includes("\r\n") ? "\r\n" : body.includes("\r") ? "\r" : "\n";
+    return { lines: body.split(/\r\n|\r|\n/), nl, ends };
+  };
+
+  const mapLines = (fn) => {
+    const { lines, nl, ends } = splitKeepEnd();
+    return lines.map(fn).join(nl) + ends;
+  };
+
+  const cycleOn = (line, seps, dir) => {
+    let searchFrom = 0;
+    if (seps.includes(":")) {
+      const scheme = line.match(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//);
+      if (scheme) searchFrom = scheme[0].length;
+    }
+    const prefix = line.slice(0, searchFrom);
+    const rest = line.slice(searchFrom);
+    const sorted = [...seps]
+      .sort((a, b) => b.length - a.length)
+      .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const re = new RegExp("(\\s*(?:" + sorted.join("|") + ")\\s*)");
+    const tokens = rest.split(re);
+    const fields = [];
+    const found = [];
+    for (let i = 0; i < tokens.length; i += 1) {
+      if (i % 2 === 0) fields.push(tokens[i]);
+      else found.push(tokens[i]);
+    }
+    if (fields.length < 2) return line;
+    if (dir === "right") fields.unshift(fields.pop());
+    else fields.push(fields.shift());
+    let out = prefix + fields[0];
+    for (let i = 0; i < found.length; i += 1) {
+      out += found[i] + (fields[i + 1] != null ? fields[i + 1] : "");
+    }
+    return out;
+  };
+
+  const cycleWords = (line, dir) => {
+    const m = line.match(/^(\s*)(.*?)(\s*)$/);
+    if (!m) return line;
+    const parts = m[2].split(/(\s+)/);
+    const wordIdx = [];
+    for (let i = 0; i < parts.length; i += 1) {
+      if (parts[i] && !/^\s+$/.test(parts[i])) wordIdx.push(i);
+    }
+    if (wordIdx.length < 2) return line;
+    const words = wordIdx.map((i) => parts[i]);
+    if (dir === "right") words.unshift(words.pop());
+    else words.push(words.shift());
+    wordIdx.forEach((idx, n) => {
+      parts[idx] = words[n];
+    });
+    return m[1] + parts.join("") + m[3];
+  };
+
+  switch (k) {
+    case "colon-right":
+      return mapLines((l) => cycleOn(l, [":"], "right"));
+    case "equals-left":
+      return mapLines((l) => cycleOn(l, ["="], "left"));
+    case "equals-right":
+      return mapLines((l) => cycleOn(l, ["="], "right"));
+    case "pipe-right":
+      return mapLines((l) => cycleOn(l, ["|"], "right"));
+    case "comma-left":
+      return mapLines((l) => cycleOn(l, [","], "left"));
+    case "comma-right":
+      return mapLines((l) => cycleOn(l, [","], "right"));
+    case "arrow-left":
+      return mapLines((l) => cycleOn(l, ["=>", "->", "→"], "left"));
+    case "arrow-right":
+      return mapLines((l) => cycleOn(l, ["=>", "->", "→"], "right"));
+    case "words-left":
+      return mapLines((l) => cycleWords(l, "left"));
+    case "words-right":
+      return mapLines((l) => cycleWords(l, "right"));
+    case "colon-left":
+      return mapLines((l) => cycleOn(l, [":"], "left"));
+    case "pipe-left":
+    default:
+      return mapLines((l) => cycleOn(l, ["|"], "left"));
+  }
+}
+
+function cycleLast(kind = "pipe-left") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to cycle", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = cycleText(src, kind);
+  if (text === src) {
+    notify("Cycle made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
  */
@@ -9987,6 +10122,24 @@ function rebuildTrayMenu() {
         { label: "Last line", click: () => takeLast("last-line") },
       ],
     },
+    {
+      label: "Cycle last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Left on |", click: () => cycleLast("pipe-left") },
+        { label: "Right on |", click: () => cycleLast("pipe-right") },
+        { label: "Left on :", click: () => cycleLast("colon-left") },
+        { label: "Right on :", click: () => cycleLast("colon-right") },
+        { label: "Left on =", click: () => cycleLast("equals-left") },
+        { label: "Right on =", click: () => cycleLast("equals-right") },
+        { label: "Left on ,", click: () => cycleLast("comma-left") },
+        { label: "Right on ,", click: () => cycleLast("comma-right") },
+        { label: "Left on => / ->", click: () => cycleLast("arrow-left") },
+        { label: "Right on => / ->", click: () => cycleLast("arrow-right") },
+        { label: "Words left", click: () => cycleLast("words-left") },
+        { label: "Words right", click: () => cycleLast("words-right") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10654,6 +10807,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "colon-right"),
       text: takeText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("cycle-last", (_e, kind) =>
+    cycleLast(String(kind || "pipe-left"))
+  );
+  ipcMain.handle("cycle-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "pipe-left"),
+      text: cycleText(src, kind),
       source: src,
     };
   });

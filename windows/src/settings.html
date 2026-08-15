@@ -644,6 +644,21 @@
     <button type="button" id="tkLastL" class="ghost">Last line</button>
   </div>
 
+  <label>Cycle last <span style="font-weight:400;color:var(--muted)">(left/right on :/=/|/ , / arrows · words · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="cyPipeL" class="ghost">Left |</button>
+    <button type="button" id="cyPipeR" class="ghost">Right |</button>
+    <button type="button" id="cyColonL" class="ghost">Left :</button>
+    <button type="button" id="cyColonR" class="ghost">Right :</button>
+    <button type="button" id="cyEqL" class="ghost">Left =</button>
+    <button type="button" id="cyEqR" class="ghost">Right =</button>
+    <button type="button" id="cyCommaL" class="ghost">Left ,</button>
+    <button type="button" id="cyCommaR" class="ghost">Right ,</button>
+    <button type="button" id="cyArrowL" class="ghost">Left arrow</button>
+    <button type="button" id="cyWordsL" class="ghost">Words left</button>
+    <button type="button" id="cyWordsR" class="ghost">Words right</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -2158,6 +2173,23 @@
     document.getElementById('tkLastW').onclick = () => takeNow('last-word');
     document.getElementById('tkFirstL').onclick = () => takeNow('first-line');
     document.getElementById('tkLastL').onclick = () => takeNow('last-line');
+    async function cycleNow(kind) {
+      const r = await window.dictaste.cycleLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Cycle: no changes' : ('Cycle · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Cycle failed');
+    }
+    document.getElementById('cyPipeL').onclick = () => cycleNow('pipe-left');
+    document.getElementById('cyPipeR').onclick = () => cycleNow('pipe-right');
+    document.getElementById('cyColonL').onclick = () => cycleNow('colon-left');
+    document.getElementById('cyColonR').onclick = () => cycleNow('colon-right');
+    document.getElementById('cyEqL').onclick = () => cycleNow('equals-left');
+    document.getElementById('cyEqR').onclick = () => cycleNow('equals-right');
+    document.getElementById('cyCommaL').onclick = () => cycleNow('comma-left');
+    document.getElementById('cyCommaR').onclick = () => cycleNow('comma-right');
+    document.getElementById('cyArrowL').onclick = () => cycleNow('arrow-left');
+    document.getElementById('cyWordsL').onclick = () => cycleNow('words-left');
+    document.getElementById('cyWordsR').onclick = () => cycleNow('words-right');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

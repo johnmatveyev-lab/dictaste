@@ -857,6 +857,15 @@ else fail("settings missing take last");
 if (/takeLast|takePreview/.test(preload))
   pass("preload take last");
 else fail("preload missing take last");
+if (/cycleLast|cycleText|Cycle last/.test(main))
+  pass("main cycle last");
+else fail("main missing cycle last");
+if (/id="cyPipeL"|cycleLast|Cycle last/i.test(settings))
+  pass("settings cycle last");
+else fail("settings missing cycle last");
+if (/cycleLast|cyclePreview/.test(preload))
+  pass("preload cycle last");
+else fail("preload missing cycle last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 
