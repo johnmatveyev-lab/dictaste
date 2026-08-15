@@ -673,6 +673,18 @@
     <button type="button" id="lsFromComma" class="ghost">Comma → lines</button>
   </div>
 
+  <label>Fill last <span style="font-weight:400;color:var(--muted)">(down/up blanks · repeat block · each line · updates last history item)</span></label>
+  <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+    <button type="button" id="flDown" class="ghost">Fill down</button>
+    <button type="button" id="flUp" class="ghost">Fill up</button>
+    <button type="button" id="flRep2" class="ghost">Block ×2</button>
+    <button type="button" id="flRep3" class="ghost">Block ×3</button>
+    <button type="button" id="flEach2" class="ghost">Each ×2</button>
+    <button type="button" id="flEach3" class="ghost">Each ×3</button>
+    <button type="button" id="flLast3" class="ghost">Last ×3</button>
+    <button type="button" id="flFirst3" class="ghost">First ×3</button>
+  </div>
+
   <label>After paste</label>
   <select id="pasteSuffix" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--fg);padding:11px 12px;font:inherit;">
     <option value=" ">Trailing space (default · chain dictations)</option>
@@ -2220,6 +2232,20 @@
     document.getElementById('lsOr').onclick = () => listNow('or');
     document.getElementById('lsStrip').onclick = () => listNow('strip');
     document.getElementById('lsFromComma').onclick = () => listNow('lines-from-comma');
+    async function fillNow(kind) {
+      const r = await window.dictaste.fillLast(kind);
+      document.getElementById('status').textContent = r?.ok
+        ? (r.unchanged ? 'Fill: no changes' : ('Fill · ' + (r.kind || kind) + (r.deliver === 'paste' ? ' · pasted' : '')))
+        : (r?.error || 'Fill failed');
+    }
+    document.getElementById('flDown').onclick = () => fillNow('down');
+    document.getElementById('flUp').onclick = () => fillNow('up');
+    document.getElementById('flRep2').onclick = () => fillNow('repeat-2');
+    document.getElementById('flRep3').onclick = () => fillNow('repeat-3');
+    document.getElementById('flEach2').onclick = () => fillNow('each-2');
+    document.getElementById('flEach3').onclick = () => fillNow('each-3');
+    document.getElementById('flLast3').onclick = () => fillNow('last-x3');
+    document.getElementById('flFirst3').onclick = () => fillNow('first-x3');
 
     document.getElementById('historyEditSave').onclick = () => {
       saveHistoryEdit({ paste: false }).catch(() => {});

@@ -875,6 +875,15 @@ else fail("settings missing list last");
 if (/listLast|listPreview/.test(preload))
   pass("preload list last");
 else fail("preload missing list last");
+if (/fillLast|fillText|Fill last/.test(main))
+  pass("main fill last");
+else fail("main missing fill last");
+if (/id="flDown"|fillLast|Fill last/i.test(settings))
+  pass("settings fill last");
+else fail("settings missing fill last");
+if (/fillLast|fillPreview/.test(preload))
+  pass("preload fill last");
+else fail("preload missing fill last");
 if (/FlowDictate|flowdictate/.test(main)) fail("FlowDictate leak in main.js");
 else pass("no FlowDictate in main.js");
 

@@ -66,6 +66,7 @@
  * - Take last (left/right of :/=/|/ , / => · first/last word · line)
  * - Cycle last (left/right on :/=/|/ , / => · words)
  * - List last (bullets · numbered · comma · and · strip markers)
+ * - Fill last (down/up blanks · repeat block · each line)
  */
 const {
   app,
@@ -8196,6 +8197,114 @@ function listLast(kind = "bullets") {
 }
 
 /**
+ * Fill blanks / repeat last transcript.
+ * @param {"down"|"up"|"repeat-2"|"repeat-3"|"each-2"|"each-3"|"last-x3"|"first-x3"} kind
+ */
+function fillText(raw, kind = "down") {
+  const t = String(raw || "");
+  if (!t.length) return "";
+  const k = String(kind || "down");
+  const ends = /\r\n$/.test(t) ? "\r\n" : /\n$/.test(t) ? "\n" : /\r$/.test(t) ? "\r" : "";
+  const body = ends ? t.slice(0, -ends.length) : t;
+  const nl = body.includes("\r\n") ? "\r\n" : body.includes("\r") ? "\r" : "\n";
+  const lines = body.split(/\r\n|\r|\n/);
+  const join = (arr) => arr.join(nl) + ends;
+
+  switch (k) {
+    case "up": {
+      const out = lines.slice();
+      let next = "";
+      for (let i = out.length - 1; i >= 0; i -= 1) {
+        if (String(out[i] || "").trim()) next = out[i];
+        else if (next) out[i] = next;
+      }
+      return join(out);
+    }
+    case "repeat-2":
+    case "repeat-3": {
+      const n = k === "repeat-3" ? 3 : 2;
+      const copies = [];
+      for (let i = 0; i < n; i += 1) copies.push(body);
+      return copies.join(nl) + ends;
+    }
+    case "each-2":
+    case "each-3": {
+      const n = k === "each-3" ? 3 : 2;
+      const out = [];
+      for (const line of lines) {
+        for (let i = 0; i < n; i += 1) out.push(line);
+      }
+      return join(out);
+    }
+    case "last-x3": {
+      let last = "";
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        if (String(lines[i] || "").trim()) {
+          last = lines[i];
+          break;
+        }
+      }
+      if (!last) return t;
+      return join(lines.concat([last, last, last]));
+    }
+    case "first-x3": {
+      const first = lines.find((l) => String(l || "").trim()) || lines[0] || "";
+      if (!first) return t;
+      return join([first, first, first].concat(lines));
+    }
+    case "down":
+    default: {
+      const out = [];
+      let prev = "";
+      for (const line of lines) {
+        if (String(line || "").trim()) {
+          prev = line;
+          out.push(line);
+        } else {
+          out.push(prev || line);
+        }
+      }
+      return join(out);
+    }
+  }
+}
+
+function fillLast(kind = "down") {
+  const src = getLatestTranscript();
+  if (!src) {
+    notify("No transcript to fill", { force: true });
+    return { ok: false, error: "empty" };
+  }
+  const text = fillText(src, kind);
+  if (text === src) {
+    notify("Fill made no changes", { force: true });
+    return { ok: true, text, kind, deliver: "none", source: src, unchanged: true };
+  }
+  lastTranscript = text;
+  try {
+    const hist = normalizeHistory(cfg?.history);
+    if (hist.length && String(hist[0] || "").trim() === src) {
+      hist[0] = text;
+      cfg = { ...cfg, history: hist };
+      saveConfig(cfg);
+    } else {
+      const pinned = normalizePinned(cfg?.pinnedHistory);
+      if (pinned.length && String(pinned[0] || "").trim() === src) {
+        pinned[0] = text;
+        cfg = { ...cfg, pinnedHistory: pinned };
+        saveConfig(cfg);
+      }
+    }
+  } catch {
+    /* ignore persist errors */
+  }
+  rebuildTrayMenu();
+  const del = deliverText(text);
+  if (del.mode === "paste") notifyDeliver(text, "paste");
+  return { ok: true, text, kind, deliver: del.mode, source: src };
+}
+
+/**
  * Diff last transcript against previous history item (or clipboard).
  * @param {"unified"|"context"|"only-added"|"only-removed"|"stats"|"side-by-side"|"vs-clipboard"|"word"} kind
  */
@@ -10306,6 +10415,20 @@ function rebuildTrayMenu() {
         { label: "Comma → lines", click: () => listLast("lines-from-comma") },
       ],
     },
+    {
+      label: "Fill last",
+      enabled: !hotkeysPaused && !!getLatestTranscript(),
+      submenu: [
+        { label: "Fill down blanks", click: () => fillLast("down") },
+        { label: "Fill up blanks", click: () => fillLast("up") },
+        { label: "Repeat block ×2", click: () => fillLast("repeat-2") },
+        { label: "Repeat block ×3", click: () => fillLast("repeat-3") },
+        { label: "Each line ×2", click: () => fillLast("each-2") },
+        { label: "Each line ×3", click: () => fillLast("each-3") },
+        { label: "Append last line ×3", click: () => fillLast("last-x3") },
+        { label: "Prepend first line ×3", click: () => fillLast("first-x3") },
+      ],
+    },
     { label: "Settings…", click: () => openSettings() },
     {
       label: "Open dashboard",
@@ -10999,6 +11122,19 @@ app.whenReady().then(() => {
       ok: true,
       kind: String(kind || "bullets"),
       text: listText(src, kind),
+      source: src,
+    };
+  });
+  ipcMain.handle("fill-last", (_e, kind) =>
+    fillLast(String(kind || "down"))
+  );
+  ipcMain.handle("fill-preview", (_e, kind) => {
+    const src = getLatestTranscript();
+    if (!src) return { ok: false, error: "empty" };
+    return {
+      ok: true,
+      kind: String(kind || "down"),
+      text: fillText(src, kind),
       source: src,
     };
   });
